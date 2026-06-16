@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+packages/extension/monkeysee-extension.zip
+.DS_Store

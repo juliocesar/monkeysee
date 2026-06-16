@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font: 13px/1.4 -apple-system, system-ui, sans-serif;
+        width: 280px;
+        margin: 0;
+        padding: 12px;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #c33;
+      }
+      .dot.on {
+        background: #2a2;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0;
+      }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        height: 64px;
+        font: 12px monospace;
+        resize: vertical;
+      }
+      button {
+        margin-top: 6px;
+      }
+      .hint {
+        color: #666;
+        font-size: 11px;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>MonkeySee Browser Agent</h1>
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="status">checking…</span>
+    </div>
+    <div>Controlled tab: <span id="tab">—</span></div>
+    <hr />
+    <label><input type="checkbox" id="trusted" /> Trusted input (chrome.debugger)</label>
+    <div class="hint">
+      Uses CDP for real, trusted clicks/keys (e.g. Enter submits search boxes). Chrome
+      shows a "started debugging this browser" banner while active. Off = synthetic events.
+    </div>
+    <hr />
+    <label><input type="checkbox" id="enforce" /> Enforce domain allowlist</label>
+    <div class="hint">When on, mutating actions are blocked off-allowlist.</div>
+    <textarea id="allowlist" placeholder="one domain per line, e.g. en.wikipedia.org"></textarea>
+    <button id="save">Save</button>
+    <span id="saved" class="hint"></span>
+    <script src="popup.js"></script>
+  </body>
+</html>

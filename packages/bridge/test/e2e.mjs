@@ -1,0 +1,175 @@
+// End-to-end bridge verification WITHOUT a browser.
+//
+// Spawns the real bridge (MCP over stdio + WS server), connects a *fake extension*
+// WS client that answers RpcRequests with canned data, then drives the bridge as a
+// real MCP client and asserts the full path: tool call -> WS RPC -> correlation ->
+// result, plus stale_handle error mapping and not-connected behavior.
+
+import { WebSocket } from 'ws'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const BRIDGE = resolve(__dirname, '../dist/index.js')
+const PORT = '8799' // dedicated test port
+
+let failures = 0
+function check(name, cond) {
+  if (cond) console.log(`  ✓ ${name}`)
+  else {
+    console.error(`  ✗ ${name}`)
+    failures++
+  }
+}
+
+// A fake extension: connects to the bridge WS and answers RpcRequests.
+function startFakeExtension() {
+  const ws = new WebSocket(`ws://localhost:${PORT}`)
+  const fakeState = {
+    tabId: 7,
+    url: 'https://en.wikipedia.org/wiki/Wales',
+    title: 'Wales - Wikipedia',
+    viewport: { w: 1280, h: 800, scrollX: 0, scrollY: 0, dpr: 2 },
+    elements: [
+      {
+        index: 0,
+        frameId: 0,
+        role: 'searchbox',
+        name: 'Search Wikipedia',
+        box: [10, 10, 200, 30],
+        inViewport: true,
+      },
+      {
+        index: 1,
+        frameId: 0,
+        role: 'link',
+        name: 'Wales',
+        box: [10, 60, 80, 20],
+        inViewport: true,
+      },
+    ],
+    loading: false,
+  }
+  ws.on('open', () => {
+    ws.send(JSON.stringify({ type: 'hello', extensionVersion: '0.0.1', protocolVersion: '0.0.1' }))
+  })
+  ws.on('message', raw => {
+    let req
+    try {
+      req = JSON.parse(raw.toString())
+    } catch {
+      return
+    }
+    if (!req.id) return
+    let res
+    switch (req.method) {
+      case 'get_state':
+        res = { id: req.id, ok: true, result: fakeState }
+        break
+      case 'extract_text':
+        res = {
+          id: req.id,
+          ok: true,
+          result: { text: 'Wales is a country that is part of the United Kingdom.' },
+        }
+        break
+      case 'click':
+        // Simulate a stale handle to exercise error mapping.
+        res = {
+          id: req.id,
+          ok: false,
+          error: { code: 'stale_handle', message: 'Element 1 is gone.' },
+        }
+        break
+      case 'open_tab':
+        res = { id: req.id, ok: true, result: { tabId: 7 } }
+        break
+      default:
+        res = { id: req.id, ok: true, result: { ok: true } }
+    }
+    ws.send(JSON.stringify(res))
+  })
+  return ws
+}
+
+function textOf(result) {
+  return (result.content ?? []).map(c => c.text ?? '').join('\n')
+}
+
+async function main() {
+  const transport = new StdioClientTransport({
+    command: 'node',
+    args: [BRIDGE],
+    env: { ...process.env, MONKEYSEE_WS_PORT: PORT },
+    stderr: 'inherit',
+  })
+  const client = new Client({ name: 'e2e-test', version: '0.0.0' })
+  await client.connect(transport)
+  console.log('MCP client connected to bridge')
+
+  // 1) not-connected behavior: call before the fake extension attaches.
+  const notConnected = await client.callTool({ name: 'get_state', arguments: {} })
+  check('get_state before extension connects returns an error', notConnected.isError === true)
+  check(
+    'not-connected error tells the user to open Chrome',
+    /not connected|extension/i.test(textOf(notConnected)),
+  )
+
+  // Attach the fake extension and wait for the handshake to register.
+  const ext = startFakeExtension()
+  await new Promise((res, rej) => {
+    ext.once('open', () => setTimeout(res, 200))
+    ext.once('error', rej)
+  })
+
+  // 2) tool listing
+  const tools = await client.listTools()
+  const names = tools.tools.map(t => t.name)
+  check(
+    'all expected tools are registered',
+    [
+      'get_state',
+      'extract_text',
+      'click',
+      'type',
+      'open_tab',
+      'navigate',
+      'wait_for_load',
+      'done',
+    ].every(n => names.includes(n)),
+  )
+
+  // 3) get_state round-trips the PageState
+  const state = await client.callTool({ name: 'get_state', arguments: { limit: 50 } })
+  check('get_state succeeds', !state.isError)
+  check('get_state returns the page url', textOf(state).includes('en.wikipedia.org/wiki/Wales'))
+  check('get_state returns indexed elements', textOf(state).includes('"role": "searchbox"'))
+
+  // 4) stale_handle maps to an actionable error
+  const click = await client.callTool({ name: 'click', arguments: { index: 1 } })
+  check('click stale handle is an error', click.isError === true)
+  check('stale_handle message tells agent to re-read', /get_state/i.test(textOf(click)))
+
+  // 5) done grounds the answer with url + snippet
+  const done = await client.callTool({
+    name: 'done',
+    arguments: { answer: 'Found the Wales article.' },
+  })
+  const doneText = textOf(done)
+  check('done returns the answer', doneText.includes('Found the Wales article.'))
+  check('done grounds with url', doneText.includes('en.wikipedia.org/wiki/Wales'))
+  check('done grounds with snippet', /Wales is a country/.test(doneText))
+
+  ext.close()
+  await client.close()
+
+  console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`)
+  process.exit(failures === 0 ? 0 : 1)
+}
+
+main().catch(err => {
+  console.error('e2e harness crashed:', err)
+  process.exit(1)
+})

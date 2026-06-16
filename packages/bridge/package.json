@@ -1,0 +1,30 @@
+{
+  "name": "@monkeysee/bridge",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "monkeysee-bridge": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs && tsc -p tsconfig.build.json",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "test": "node test/e2e.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@monkeysee/protocol": "workspace:*",
+    "ws": "^8.18.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^6.0.0",
+    "esbuild": "^0.28.0"
+  }
+}
