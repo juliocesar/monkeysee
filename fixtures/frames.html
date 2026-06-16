@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MonkeySee M2 — same-origin iframe fixture</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 24px;
+      }
+      iframe {
+        width: 480px;
+        height: 200px;
+        border: 2px solid #333;
+        margin-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Top frame</h1>
+    <button id="top-btn">Top-frame button</button>
+    <p>Below is a same-origin iframe (served from the same http origin):</p>
+    <iframe src="child.html" title="child frame"></iframe>
+  </body>
+</html>

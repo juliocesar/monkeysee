@@ -31,6 +31,8 @@ export const PressParams = z.object({
 })
 export const TypeTextParams = z.object({ text: z.string() })
 
+export const ScreenshotParams = z.object({})
+
 export const OpenTabParams = z.object({ url: z.url() }) // zod 4: top-level z.url()
 export const NavigateParams = z.object({ url: z.url() })
 export const ExtractTextParams = z.object({ index: z.number().int().optional() })

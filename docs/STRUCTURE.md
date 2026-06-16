@@ -45,16 +45,17 @@ content = IIFE). Load unpacked from `dist/`.
 | ----------------------------- | ------------------------------------------------------------------------ |
 | `src/background/index.ts`     | SW entry: init nav + debugger, start WS client, popup status message     |
 | `src/background/ws-client.ts` | connect to bridge, reconnect w/ backoff, `chrome.alarms` keepalive, hello |
-| `src/background/router.ts`    | route RPC → tab/nav APIs or content script; frame aggregator; safety gate; backend selection |
+| `src/background/router.ts`    | route RPC → tab/nav APIs or content script; per-frame fan-out + aggregate; safety gate; backend selection |
 | `src/background/nav.ts`       | per-tab loading state via `webNavigation`; `onceSettled` for `wait_for_load` |
 | `src/background/debugger-backend.ts` | M1 trusted input: CDP `Input.dispatch*` (mouse/keys/insertText) via `chrome.debugger` |
+| `src/background/screenshot.ts` | M2 visual fallback: `captureVisibleTab` PNG; set-of-marks via `OffscreenCanvas` |
 
 **Content (the smart part — eyes + hands):**
 
 | File                       | Purpose                                                                    |
 | -------------------------- | -------------------------------------------------------------------------- |
 | `src/content/index.ts`     | message dispatcher; `wait_quiet` (MutationObserver); `locate` (coords for CDP) |
-| `src/content/indexer.ts`   | build `PageState`: candidate collection, visibility filter, role/name, ranking, `limit` |
+| `src/content/indexer.ts`   | build `PageState`: candidate collection, visibility filter, role/name, ranking, `limit`; `frameOffset` (top-viewport coords for iframes) |
 | `src/content/handles.ts`   | index → Element registry; stale re-resolution; `cssPath` / `accessibleName` / `roleOf` |
 | `src/content/actions.ts`   | synthetic-event backend: click/type/scroll/press/etc. (M0 fallback)         |
 
@@ -63,13 +64,13 @@ content = IIFE). Load unpacked from `dist/`.
 | File                       | Purpose                                                            |
 | -------------------------- | ------------------------------------------------------------------ |
 | `src/shared/messages.ts`   | SW ↔ content message types (`ContentRequest` / `ContentResponse`)   |
-| `manifest.json`            | MV3 manifest (`debugger` required; `all_frames:false` until M2)     |
+| `manifest.json`            | MV3 manifest (`debugger` required; `all_frames:true` since M2)      |
 | `static/popup.html` + `.js`| status, allowlist editor, trusted-input toggle                      |
 | `static/icons/`            | generated PNG icons (16/48/128)                                     |
 
 ## MCP tool surface (what the agent sees)
 
-- **Observation:** `get_state`, `extract_text`, `screenshot` (M2, stubbed)
+- **Observation:** `get_state` (`withScreenshot` adds set-of-marks), `extract_text`, `screenshot`
 - **Semantic actions** (by `index`): `click`, `type`, `select_option`, `hover`, `focus`
 - **Spatial/raw:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
 - **Navigation:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`

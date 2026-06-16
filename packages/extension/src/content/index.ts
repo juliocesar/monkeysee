@@ -1,5 +1,5 @@
 import { isContentRequest, type ContentRequest, type ContentResponse } from '../shared/messages'
-import { buildPageState, extractText } from './indexer'
+import { buildPageState, extractText, frameOffset } from './indexer'
 import { resolveHandle } from './handles'
 import * as actions from './actions'
 import { ContentError } from './actions'
@@ -46,10 +46,13 @@ async function dispatch(req: ContentRequest): Promise<unknown> {
       }
       el.scrollIntoView({ block: 'center', inline: 'center' })
       const r = el.getBoundingClientRect()
+      // Return top-viewport coords so the SW's CDP backend dispatches at the right pixel
+      // even for elements inside a same-origin iframe.
+      const off = frameOffset()
       return {
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        box: [r.left, r.top, r.width, r.height],
+        x: r.left + off.x + r.width / 2,
+        y: r.top + off.y + r.height / 2,
+        box: [r.left + off.x, r.top + off.y, r.width, r.height],
       }
     }
     case 'get_state':

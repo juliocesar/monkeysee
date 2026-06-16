@@ -1,4 +1,5 @@
 import type { Box, ElementHandle, PageState } from '@monkeysee/protocol'
+import { FRAME_STRIDE } from '@monkeysee/protocol'
 import { accessibleName, clearHandles, roleOf, setHandle } from './handles'
 
 const INTERACTIVE_SELECTOR = [
@@ -16,7 +17,31 @@ const INTERACTIVE_SELECTOR = [
 const STRUCTURAL_SELECTOR = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', '[role=heading]'].join(',')
 
 const DEFAULT_LIMIT = 200
-const FRAME_STRIDE = 100_000
+
+/**
+ * Offset of this frame's viewport origin within the TOP document's viewport, in CSS px.
+ * Sums the `frameElement` rects up the parent chain (same-origin only — the SW only ever
+ * asks same-origin frames). Returns {0,0} for the top frame or if a cross-origin ancestor
+ * blocks access, so callers always get top-viewport coordinates when it matters.
+ */
+export function frameOffset(): { x: number; y: number } {
+  let x = 0
+  let y = 0
+  try {
+    let win: Window = window
+    while (win !== win.parent) {
+      const fe = win.frameElement
+      if (!fe) break
+      const r = fe.getBoundingClientRect()
+      x += r.left
+      y += r.top
+      win = win.parent
+    }
+  } catch {
+    // cross-origin ancestor — can't compute; fall back to frame-local (top frame is {0,0}).
+  }
+  return { x, y }
+}
 
 interface Candidate {
   el: Element
@@ -76,6 +101,10 @@ export function buildPageState(frameId: number, limit = DEFAULT_LIMIT, loading =
   for (const el of document.querySelectorAll(INTERACTIVE_SELECTOR)) nodes.add(el)
   for (const el of document.querySelectorAll(STRUCTURAL_SELECTOR)) nodes.add(el)
 
+  // Offset to the top viewport so boxes from iframes share one coordinate space with the
+  // top frame (used by set-of-marks and the trusted/debugger backend). {0,0} for the top.
+  const off = frameOffset()
+
   const candidates: Candidate[] = []
   for (const el of nodes) {
     const rect = el.getBoundingClientRect()
@@ -83,7 +112,13 @@ export function buildPageState(frameId: number, limit = DEFAULT_LIMIT, loading =
     // Skip if an interactive ancestor is also in our set (avoid duplicate wrappers).
     if (hasIndexedInteractiveAncestor(el, nodes)) continue
 
-    const box: Box = [round(rect.left), round(rect.top), round(rect.width), round(rect.height)]
+    // Visibility/ranking stay frame-local; the reported box is in top-viewport coords.
+    const box: Box = [
+      round(rect.left + off.x),
+      round(rect.top + off.y),
+      round(rect.width),
+      round(rect.height),
+    ]
     candidates.push({
       el,
       role: roleOf(el),

@@ -15,6 +15,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const BRIDGE = resolve(__dirname, '../dist/index.js')
 const PORT = '8799' // dedicated test port
 
+// A 1x1 transparent PNG; stands in for a captured viewport in the browser-free harness.
+const TINY_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 let failures = 0
 function check(name, cond) {
   if (cond) console.log(`  ✓ ${name}`)
@@ -65,8 +69,18 @@ function startFakeExtension() {
     if (!req.id) return
     let res
     switch (req.method) {
-      case 'get_state':
-        res = { id: req.id, ok: true, result: fakeState }
+      case 'get_state': {
+        // Mirror the extension: withScreenshot rides a base64 PNG along on the PageState.
+        const withShot = req.params && req.params.withScreenshot
+        res = {
+          id: req.id,
+          ok: true,
+          result: withShot ? { ...fakeState, screenshot: TINY_PNG } : fakeState,
+        }
+        break
+      }
+      case 'screenshot':
+        res = { id: req.id, ok: true, result: { imageBase64: TINY_PNG } }
         break
       case 'extract_text':
         res = {
@@ -137,6 +151,7 @@ async function main() {
       'open_tab',
       'navigate',
       'wait_for_load',
+      'screenshot',
       'done',
     ].every(n => names.includes(n)),
   )
@@ -151,6 +166,28 @@ async function main() {
   const click = await client.callTool({ name: 'click', arguments: { index: 1 } })
   check('click stale handle is an error', click.isError === true)
   check('stale_handle message tells agent to re-read', /get_state/i.test(textOf(click)))
+
+  // 4b) screenshot returns an MCP image content block
+  const shot = await client.callTool({ name: 'screenshot', arguments: {} })
+  check('screenshot succeeds', !shot.isError)
+  const shotImg = (shot.content ?? []).find(c => c.type === 'image')
+  check('screenshot returns an image block', !!shotImg && shotImg.data === TINY_PNG)
+  check('screenshot image is png', !!shotImg && shotImg.mimeType === 'image/png')
+
+  // 4c) get_state withScreenshot returns the PageState text AND a marked image
+  const shotState = await client.callTool({
+    name: 'get_state',
+    arguments: { withScreenshot: true },
+  })
+  check('get_state withScreenshot still returns the url', textOf(shotState).includes('wiki/Wales'))
+  check(
+    'get_state withScreenshot does not leak base64 into the text block',
+    !textOf(shotState).includes(TINY_PNG),
+  )
+  check(
+    'get_state withScreenshot attaches an image block',
+    (shotState.content ?? []).some(c => c.type === 'image' && c.data === TINY_PNG),
+  )
 
   // 5) done grounds the answer with url + snippet
   const done = await client.callTool({

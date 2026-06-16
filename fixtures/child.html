@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>child frame</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 16px;
+      }
+      #status {
+        margin-top: 12px;
+        font-weight: bold;
+        color: #0a7;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Inside the iframe</h2>
+    <button id="iframe-btn">Click me (in the iframe)</button>
+    <div id="status">not clicked</div>
+    <script>
+      document.getElementById('iframe-btn').addEventListener('click', () => {
+        document.getElementById('status').textContent = 'IFRAME BUTTON CLICKED'
+        document.title = 'child frame — clicked'
+      })
+    </script>
+  </body>
+</html>

@@ -20,6 +20,7 @@ import {
   WaitForLoadParams,
   GoBackParams,
   GoForwardParams,
+  ScreenshotParams,
   DoneParams,
 } from '@monkeysee/protocol'
 import { RpcCallError, type WsServer } from './ws-server'
@@ -31,6 +32,10 @@ function textResult(data: unknown): CallToolResult {
 
 function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true }
+}
+
+function imageResult(base64: string): CallToolResult {
+  return { content: [{ type: 'image', data: base64, mimeType: 'image/png' }] }
 }
 
 function describeError(e: unknown): string {
@@ -69,10 +74,38 @@ export function registerTools(server: McpServer, ws: WsServer): void {
   server.registerTool(
     'get_state',
     {
-      description: `${OBSERVE}: read the current page as an indexed list of visible elements with roles, names, and bounding boxes. This is your primary "look at the page". Returns a PageState.`,
+      description: `${OBSERVE}: read the current page as an indexed list of visible elements with roles, names, and bounding boxes. This is your primary "look at the page". Returns a PageState. Pass withScreenshot:true to also get a viewport image with numbered marks at each element.`,
       inputSchema: GetStateParams.shape,
     },
-    async args => forward(ws, 'get_state', args),
+    async args => {
+      try {
+        const state = (await ws.call('get_state', args)) as PageState & { screenshot?: string }
+        const { screenshot, ...rest } = state
+        const content: CallToolResult['content'] = [
+          { type: 'text', text: JSON.stringify(rest, null, 2) },
+        ]
+        if (screenshot) content.push({ type: 'image', data: screenshot, mimeType: 'image/png' })
+        return { content }
+      } catch (e) {
+        return errorResult(describeError(e))
+      }
+    },
+  )
+
+  server.registerTool(
+    'screenshot',
+    {
+      description: `${OBSERVE}: capture the controlled tab's visible viewport as a PNG image. Use when the indexed element list is not enough and you need to see the page.`,
+      inputSchema: ScreenshotParams.shape,
+    },
+    async () => {
+      try {
+        const r = (await ws.call('screenshot', {})) as { imageBase64: string }
+        return imageResult(r.imageBase64)
+      } catch (e) {
+        return errorResult(describeError(e))
+      }
+    },
   )
 
   server.registerTool(

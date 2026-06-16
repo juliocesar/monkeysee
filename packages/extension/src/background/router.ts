@@ -1,7 +1,11 @@
 import type { PageState, RpcError, RpcMethod, RpcRequest, RpcResponse } from '@monkeysee/protocol'
+import { FRAME_STRIDE } from '@monkeysee/protocol'
 import type { ContentMethod, ContentRequest, ContentResponse } from '../shared/messages'
 import { isLoading, onceSettled } from './nav'
 import * as dbg from './debugger-backend'
+import * as shot from './screenshot'
+
+const DEFAULT_STATE_LIMIT = 200
 
 class RouterError extends Error {
   constructor(public readonly rpc: RpcError) {
@@ -108,11 +112,10 @@ async function route(req: RpcRequest): Promise<unknown> {
       await sendToContent(tabId, 'wait_quiet', { quietMs: 500, timeoutMs: remaining })
       return { ok: true, loading: isLoading(tabId) }
     }
-    case 'screenshot':
-      throw new RouterError({
-        code: 'internal',
-        message: 'screenshot is an M2 feature, not yet implemented.',
-      })
+    case 'screenshot': {
+      const tabId = await resolveTab(req)
+      return { imageBase64: await shot.capture(tabId) }
+    }
     default: {
       if (CONTENT_METHODS.has(req.method as ContentMethod)) {
         const tabId = await resolveTab(req)
@@ -175,6 +178,12 @@ async function bringTabToFront(tabId: number): Promise<void> {
   }
 }
 
+/** Decode the frame a handle index belongs to (indices are `frameId * FRAME_STRIDE + n`). */
+function frameOf(params: Record<string, unknown>): number {
+  const index = params.index
+  return typeof index === 'number' ? Math.floor(index / FRAME_STRIDE) : 0
+}
+
 /** Forward a DOM method to the content script, aggregating frame partials. */
 async function forwardToContent(
   tabId: number,
@@ -183,15 +192,68 @@ async function forwardToContent(
 ): Promise<unknown> {
   if (method === 'get_state') {
     const loading = isLoading(tabId)
-    // M0: single frame. M2: query all frames and merge.
-    const partial = (await sendToContent(tabId, 'get_state', { ...params, loading })) as PageState
-    return aggregate([partial], tabId, loading)
+    const limit = (params.limit as number | undefined) ?? DEFAULT_STATE_LIMIT
+    const frames = await sameOriginFrames(tabId)
+    const partials = (
+      await Promise.all(
+        frames.map(frameId =>
+          sendToContent(tabId, 'get_state', { ...params, loading }, frameId).catch(() => null),
+        ),
+      )
+    ).filter((p): p is PageState => p !== null)
+    const state = aggregate(partials, tabId, loading, limit)
+    if (params.withScreenshot) state.screenshot = await shot.captureWithMarks(tabId, state)
+    return state
   }
-  return sendToContent(tabId, method, params)
+  // Index-based actions route to the element's own frame; spatial actions stay on the top.
+  return sendToContent(tabId, method, params, frameOf(params))
 }
 
-function aggregate(partials: PageState[], tabId: number, loading: boolean): PageState {
-  const base = partials[0]
+/**
+ * Frames to index: the top frame plus every same-origin descendant. Cross-origin frames
+ * are skipped (deferred past M2) — their geometry can't be placed in the top viewport.
+ */
+async function sameOriginFrames(tabId: number): Promise<number[]> {
+  let frames: chrome.webNavigation.GetAllFrameResultDetails[] | null = null
+  try {
+    frames = await chrome.webNavigation.getAllFrames({ tabId })
+  } catch {
+    frames = null
+  }
+  if (!frames || frames.length === 0) return [0]
+  const top = frames.find(f => f.frameId === 0)
+  const topOrigin = originOf(top?.url)
+  return frames
+    .filter(f => !f.errorOccurred)
+    .filter(f => f.frameId === 0 || sameOrigin(f.url, topOrigin))
+    .map(f => f.frameId)
+    .sort((a, b) => a - b)
+}
+
+function originOf(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+/** about:blank / about:srcdoc / data: inherit the embedder's origin — treat as same-origin. */
+function sameOrigin(url: string, topOrigin: string | null): boolean {
+  if (!url || url === 'about:blank' || url === 'about:srcdoc' || url.startsWith('data:')) {
+    return true
+  }
+  return originOf(url) === topOrigin
+}
+
+function aggregate(
+  partials: PageState[],
+  tabId: number,
+  loading: boolean,
+  limit: number,
+): PageState {
+  const base = partials.find(p => p.url) ?? partials[0]
   if (!base) {
     return {
       tabId,
@@ -202,18 +264,25 @@ function aggregate(partials: PageState[], tabId: number, loading: boolean): Page
       loading,
     }
   }
-  return { ...base, tabId, loading, elements: partials.flatMap(p => p.elements) }
+  // Prefer in-viewport elements when capping across frames; indices stay stable identifiers.
+  const elements = partials
+    .flatMap(p => p.elements)
+    .sort((a, b) => (a.inViewport === b.inViewport ? 0 : a.inViewport ? -1 : 1))
+    .slice(0, Math.max(1, limit))
+  return { ...base, tabId, loading, elements }
 }
 
-/** Send to content; inject the script and retry once if no receiver is present. */
+/** Send to a specific frame's content script; inject and retry once if no receiver is present. */
 async function sendToContent(
   tabId: number,
   method: ContentMethod | 'ping' | 'wait_quiet' | 'locate',
   params: unknown,
+  frameId = 0,
 ): Promise<unknown> {
-  const msg: ContentRequest = { channel: 'monkeysee', method, params, frameId: 0 }
+  const msg: ContentRequest = { channel: 'monkeysee', method, params, frameId }
+  const opts = { frameId }
   try {
-    return unwrap(await chrome.tabs.sendMessage<ContentRequest, ContentResponse>(tabId, msg))
+    return unwrap(await chrome.tabs.sendMessage<ContentRequest, ContentResponse>(tabId, msg, opts))
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     if (
@@ -222,8 +291,8 @@ async function sendToContent(
     ) {
       throw e
     }
-    await injectContent(tabId)
-    return unwrap(await chrome.tabs.sendMessage<ContentRequest, ContentResponse>(tabId, msg))
+    await injectContent(tabId, frameId)
+    return unwrap(await chrome.tabs.sendMessage<ContentRequest, ContentResponse>(tabId, msg, opts))
   }
 }
 
@@ -233,8 +302,11 @@ function unwrap(res: ContentResponse | undefined): unknown {
   throw new RouterError(res.error)
 }
 
-async function injectContent(tabId: number): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] })
+async function injectContent(tabId: number, frameId = 0): Promise<void> {
+  await chrome.scripting.executeScript({
+    target: { tabId, frameIds: [frameId] },
+    files: ['content.js'],
+  })
 }
 
 // ---- Trusted-input (debugger) backend ----
@@ -246,7 +318,8 @@ async function useDebuggerBackend(): Promise<boolean> {
 
 /** Resolve an index to viewport coordinates via the content script (scrolls into view). */
 async function locateForDebugger(tabId: number, index: number): Promise<{ x: number; y: number }> {
-  const r = (await sendToContent(tabId, 'locate', { index })) as { x: number; y: number }
+  const frameId = Math.floor(index / FRAME_STRIDE)
+  const r = (await sendToContent(tabId, 'locate', { index }, frameId)) as { x: number; y: number }
   return r
 }
 
