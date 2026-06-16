@@ -89,13 +89,39 @@ user. Notes:
 
 - `debugger` is a **required** permission (Chrome forbids it as optional). It is only
   _used_ when you enable the toggle.
-- While active, Chrome shows a "MonkeySee Browser Agent started debugging this browser"
-  banner on the controlled tab. That is expected.
 - If attaching fails (e.g. DevTools is open on that tab), MonkeySee silently falls back
   to the synthetic backend for that action.
 - The MCP tool surface is identical — the agent is unaffected by the backend choice.
 
-## Roadmap
+### When the "started debugging this browser" banner appears
 
-- **M2** — multi-frame aggregation (`all_frames: true`) and `screenshot()` with
-  set-of-marks overlays.
+The yellow **"MonkeySee Browser Agent started debugging this browser"** infobar is shown
+by Chrome itself whenever an extension calls `chrome.debugger.attach()`. In MonkeySee that
+happens **only** when both are true:
+
+1. the **Trusted input** backend is enabled in the popup (`chrome.storage` `backend` =
+   `debugger`), and
+2. a debugger-backed action actually runs — `click`, `type`, `type_text`, `press`,
+   `click_at`, or `drag`. Attach is lazy and **per-tab** (on the first such action), and
+   the banner stays until MonkeySee detaches or the tab closes.
+
+It does **not** appear for:
+
+- opening a tab or navigating;
+- observation — `get_state`, `extract_text`;
+- `screenshot` / `get_state({ withScreenshot: true })` — these use
+  `chrome.tabs.captureVisibleTab`, which needs no debugger;
+- any action while the backend is left on the default `content` (synthetic events).
+
+So if you keep the backend on `content`, you will never see the banner; with the trusted
+backend on, you'll see it on each tab the moment MonkeySee first dispatches input there.
+
+## Frames + screenshots (M2)
+
+- **Same-origin frames** are indexed automatically (`all_frames: true`). Elements inside a
+  same-origin iframe appear in `get_state` with `frameId != 0` and are clickable by index;
+  their boxes are reported in top-viewport coordinates. Cross-origin iframes are out of
+  scope for now.
+- **`screenshot`** returns the controlled tab's visible viewport as a PNG.
+- **`get_state({ withScreenshot: true })`** additionally returns that image with numbered
+  set-of-marks drawn at each in-viewport element's box.
