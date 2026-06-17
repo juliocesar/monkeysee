@@ -162,7 +162,7 @@ pnpm build        # build all packages
 pnpm dev          # watch all packages
 pnpm typecheck
 pnpm lint
-pnpm test         # bridge end-to-end check (no browser needed)
+pnpm test         # bridge end-to-end + multi-session checks (no browser needed)
 ```
 
 Three packages in a pnpm workspace:
