@@ -1,50 +1,88 @@
-# MonkeySee
+# 🐵 MonkeySee
 
-Let an MCP client (Claude Code, Codex, or any MCP client) drive a real, logged-in
-Chrome profile: open tabs, read pages as a compact indexed element list, click, type,
-scroll, and decide when a task is done.
+> Monkey see, monkey do. Your agent gets eyes and hands in a real Chrome.
 
-We do **not** build an agent loop. Claude Code / Codex already have one. This project
-exposes browser observation and actions as **MCP tools**. The terminal agent is the
-brain; this is the hands and eyes.
+MonkeySee lets an MCP client (Claude Code, Codex, or anything that speaks MCP) drive a
+real, logged-in Chrome profile. It opens tabs, reads the page as a compact indexed list of
+elements, clicks, types, scrolls, takes screenshots, and decides when the job is done.
 
-Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map +
-design decisions) and [`BUILD.md`](./docs/BUILD.md) (build/packaging gotchas).
+The key word is **your** Chrome. Not a fresh headless sandbox that gets logged out of
+everything. The actual browser where you are already signed into your email, your dashboard,
+your everything.
 
-## Packages
+## This is not an agent
 
-| Package               | Role                                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@monkeysee/protocol` | Shared wire types + zod schemas (the compatibility spine). Published to npm.                                |
-| `@monkeysee/bridge`   | MCP server (stdio) + WebSocket server. Translates tool calls to RPC. Published to npm with a `bin`.         |
-| `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Built into `@monkeysee/bridge` and loaded unpacked (no Chrome Web Store). |
-
-## Architecture
+Let's be clear about who does the thinking. MonkeySee has **no agent loop, no LLM, no
+"reasoning."** Your terminal agent already has all of that. MonkeySee is the dumb,
+fast, reliable set of hands and eyeballs it has always wanted.
 
 ```
-Claude Code / Codex  ──MCP(stdio)──▶  @monkeysee/bridge  ──ws://localhost:8787──▶  extension SW  ──▶  content script (DOM)
-   (the brain)                         (dumb router)                                (dumb router)      (the smart part)
+  the brain                          the hands & eyes
+┌─────────────┐   MCP (stdio)   ┌──────────────────┐   ws://localhost:8787   ┌───────────┐
+│ Claude Code │ ───────────────▶│ @monkeysee/bridge│ ───────────────────────▶│ extension │
+│   / Codex   │                 │  (dumb router)   │                         │ SW + DOM  │
+└─────────────┘                 └──────────────────┘                         └───────────┘
 ```
 
-## Install (as a user)
+The agent decides _what_ to do. MonkeySee just does it and reports back what it saw.
 
-One command installs both the MCP server and the extension — there is no Chrome Web Store
-listing:
+## What your agent can do
+
+Once it's wired up, your agent gets a toolbox:
+
+- **Look:** `get_state` (the page as a numbered element list, optionally with a
+  set-of-marks screenshot), `extract_text`, `screenshot`
+- **Act on what it sees:** `click`, `type`, `select_option`, `hover`, `focus` (all by element index)
+- **Act by hand:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
+- **Get around:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
+- **Juggle tabs:** `list_tabs`, `switch_tab`, `close_tab`
+- **Call it:** `done` (grounds the answer with the final URL + a page snippet)
+
+## Install
+
+One install ships both halves. There is no Chrome Web Store listing to hunt for.
 
 ```bash
 npm install -g @monkeysee/bridge
 ```
 
-Install prints where the bundled extension lives. Open `chrome://extensions`, enable
-**Developer mode**, click **Load unpacked**, and select that path. Then point your MCP
-client at the bridge, e.g. in `.mcp.json`:
+The install prints exactly where the bundled extension lives. Then teach Chrome about it:
+
+1. Open `chrome://extensions`
+2. Flip on **Developer mode** (top-right)
+3. Click **Load unpacked** and pick the path the installer printed
+
+Finally, point your MCP client at the bridge. For example, in `.mcp.json`:
 
 ```json
 { "mcpServers": { "monkeysee": { "command": "npx", "args": ["-y", "@monkeysee/bridge"] } } }
 ```
 
-The bridge also prints the extension path to stderr on startup, so it's in your MCP logs
-if you miss it during install.
+Missed the path during install? No problem. The bridge reprints it to stderr every time it
+starts, so it's right there in your MCP logs.
+
+## The 60-second demo
+
+The bridge is fully testable from the CLI (`pnpm test`, no browser). The full loop needs
+Chrome:
+
+1. **Build:** `pnpm build`
+2. **Load the extension:** `chrome://extensions` → Developer mode → Load unpacked →
+   `packages/extension/dist`. (The published `@monkeysee/bridge` ships the extension inside
+   it, and both the installer and the bridge's startup line print the path to load.)
+3. **Start Claude Code** here. Copy `.mcp.json.example` to `.mcp.json` first (it's
+   git-ignored, so it stays local). That entry launches the bridge over stdio. Within a few
+   seconds the extension's service worker connects to the bridge. Look for the green dot in
+   the extension popup.
+4. **Give it a job.** Try: _"find me a Wikipedia article about Wales."_ It should `open_tab`,
+   `get_state`, `type` into search, `press('Enter')` or `click`, re-read, `extract_text`,
+   and `done` with the URL and a snippet.
+
+> **`ws://localhost:8787` connection refused?** Totally normal when nothing is running. The
+> bridge only listens while an MCP client has launched it. Start Claude Code here (the
+> `.mcp.json` spawns it), or run it standalone to test the link:
+> `node packages/bridge/dist/index.js`. The service worker reconnects with backoff, so order
+> never matters. You'll see `extension connected` / `hello` on the bridge's stderr.
 
 ## Develop
 
@@ -54,106 +92,97 @@ pnpm build        # build all packages
 pnpm dev          # watch all packages
 pnpm typecheck
 pnpm lint
-pnpm test         # bridge end-to-end verification (no browser needed)
+pnpm test         # bridge end-to-end check (no browser needed)
 ```
 
-## Run the M0 acceptance task
+Three packages in a pnpm workspace:
 
-The bridge is fully verifiable from the CLI (`pnpm test`). The full loop needs Chrome:
+| Package               | Role                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@monkeysee/protocol` | Shared wire types + zod schemas. The compatibility spine. Published to npm.                                     |
+| `@monkeysee/bridge`   | MCP server (stdio) + WebSocket server. Translates tool calls to RPC. Published to npm with a `bin`.             |
+| `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Bundled into the bridge, loaded unpacked. |
 
-1. **Build:** `pnpm build`.
-2. **Load the extension:** open `chrome://extensions`, enable Developer mode,
-   "Load unpacked", select `packages/extension/dist`. (When you install the published
-   `@monkeysee/bridge`, the extension ships inside it — `npm install` and the bridge's
-   startup line both print the path to load instead.)
-3. **Start Claude Code** in this directory. Copy `.mcp.json.example` to `.mcp.json`
-   first (it is git-ignored, so it stays local); that entry launches the bridge
-   automatically (MCP over stdio). The extension's service worker connects to the
-   bridge's WebSocket server within a few seconds — confirm the green dot in the
-   extension popup.
-4. **Drive it.** Ask the agent: _"find me a Wikipedia article about Wales."_ It should
-   `open_tab`, `get_state`, `type` into search, `press('Enter')` / `click`, re-read,
-   `extract_text`, and `done` with the URL + snippet.
+The deep dive lives in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map
++ design decisions) and [`BUILD.md`](./docs/BUILD.md) (build/packaging gotchas).
 
-> **`ws://localhost:8787` connection refused?** Expected when no bridge is running.
-> The bridge only listens while an MCP client has launched it. Start Claude Code here
-> (the `.mcp.json` spawns it), or run it standalone to test the connection:
-> `node packages/bridge/dist/index.js` — the extension's service worker connects within
-> a few seconds (you'll see `extension connected` / `hello` on the bridge's stderr). The
-> service worker retries with backoff, so order doesn't matter.
-
-### Acceptance criteria (M0)
+## Did it actually work? (M0 acceptance)
 
 1. The agent ends on `https://en.wikipedia.org/wiki/Wales` and `done` returns a snippet
    mentioning Wales.
-2. `get_state` on a content-heavy page returns ≤ `limit` visible elements, each with a
-   sensible `role` + `name` + non-degenerate `box`.
-3. A stale `click(index)` after navigation returns `stale_handle` (not a wrong click);
+2. `get_state` on a busy page returns at most `limit` visible elements, each with a sensible
+   `role` + `name` and a non-degenerate `box`.
+3. A stale `click(index)` after navigation returns `stale_handle` (not a wrong click), and
    the agent recovers by re-reading with `get_state`.
-4. Killing and restarting the bridge: the extension reconnects within a few seconds
-   without reloading the extension.
+4. Kill and restart the bridge: the extension reconnects within a few seconds, no reload
+   needed.
 
-## Safety (M0, minimal)
+## Safety (minimal, but real)
 
-The extension popup has a domain allowlist. When **Enforce** is on, mutating actions
+You are pointing a robot at a browser that's logged into your life. Treat it that way.
+
+The extension popup has a **domain allowlist**. With **Enforce** on, mutating actions
 (`click`, `type`, `select_option`, `click_at`, `drag`, `press`, `type_text`) on a domain
-not in the allowlist return a `blocked` error. Observation and navigation are never
-gated.
+that isn't allowlisted return a `blocked` error. Looking and navigating are never gated.
 
-## Trusted input (M1)
+## Trusted input (chrome.debugger)
 
-By default, actions use synthetic DOM events from the content script. Some sites reject
-these (they check `event.isTrusted`, or ignore a synthetic Enter in a search box).
+By default, actions fire synthetic DOM events from the content script. Some sites are picky:
+they check `event.isTrusted`, or shrug off a synthetic Enter in a search box.
 
-Toggle **"Trusted input (chrome.debugger)"** in the popup to switch `click`, `type`,
-`type_text`, `press`, `click_at`, and `drag` to real input dispatched via the Chrome
-DevTools Protocol (`Input.dispatch*`). These events are trusted and behave like a real
-user. Notes:
+Flip **"Trusted input (chrome.debugger)"** in the popup to route `click`, `type`,
+`type_text`, `press`, `click_at`, and `drag` through real input dispatched via the Chrome
+DevTools Protocol (`Input.dispatch*`). These events are trusted and behave like a real human
+finger. Notes:
 
-- `debugger` is a **required** permission (Chrome forbids it as optional). It is only
-  _used_ when you enable the toggle.
-- If attaching fails (e.g. DevTools is open on that tab), MonkeySee silently falls back
-  to the synthetic backend for that action.
-- The MCP tool surface is identical — the agent is unaffected by the backend choice.
+- `debugger` is a **required** permission (Chrome won't allow it as optional). It's only
+  _used_ when you turn the toggle on.
+- If attaching fails (say DevTools is already open on that tab), MonkeySee quietly falls back
+  to synthetic events for that one action.
+- The MCP tool surface is identical either way. The agent never knows or cares which backend
+  ran.
 
-### When the "started debugging this browser" banner appears
+### About that yellow "started debugging this browser" banner
 
-The yellow **"MonkeySee Browser Agent started debugging this browser"** infobar is shown
-by Chrome itself whenever an extension calls `chrome.debugger.attach()`. In MonkeySee that
-happens **only** when both are true:
+Chrome itself shows the **"MonkeySee Browser Agent started debugging this browser"** infobar
+the moment any extension calls `chrome.debugger.attach()`. In MonkeySee that happens **only**
+when both are true:
 
-1. the **Trusted input** backend is enabled in the popup (`chrome.storage` `backend` =
-   `debugger`), and
-2. a debugger-backed action actually runs — `click`, `type`, `type_text`, `press`,
-   `click_at`, or `drag`. Attach is lazy and **per-tab** (on the first such action), and
-   the banner stays until MonkeySee detaches or the tab closes.
+1. the **Trusted input** backend is on in the popup, and
+2. a debugger-backed action actually runs (`click`, `type`, `type_text`, `press`,
+   `click_at`, or `drag`). Attach is lazy and per-tab, on the first such action, and the
+   banner sticks around until MonkeySee detaches or the tab closes.
 
-It does **not** appear for:
+It does **not** show up for:
 
-- opening a tab or navigating;
-- observation — `get_state`, `extract_text`;
-- `screenshot` / `get_state({ withScreenshot: true })` — these use
-  `chrome.tabs.captureVisibleTab`, which needs no debugger;
-- any action while the backend is left on the default `content` (synthetic events).
+- opening a tab or navigating
+- observation: `get_state`, `extract_text`
+- `screenshot` / `get_state({ withScreenshot: true })` (these use
+  `chrome.tabs.captureVisibleTab`, no debugger required)
+- any action while the backend is left on the default `content` (synthetic events)
 
-So if you keep the backend on `content`, you will never see the banner; with the trusted
-backend on, you'll see it on each tab the moment MonkeySee first dispatches input there.
+So: keep the backend on `content` and you'll never see the banner. Turn the trusted backend
+on and you'll see it on each tab the first time MonkeySee dispatches input there.
+
+## Frames + screenshots
+
+- **Same-origin frames** are indexed automatically (`all_frames: true`). Elements inside a
+  same-origin iframe show up in `get_state` with `frameId != 0`, are clickable by index, and
+  report their boxes in top-viewport coordinates. Cross-origin iframes are out of scope for
+  now.
+- **`screenshot`** returns the controlled tab's visible viewport as a PNG.
+- **`get_state({ withScreenshot: true })`** adds that image with numbered set-of-marks drawn
+  over each in-viewport element. Great for the agent to "point" with confidence.
 
 ## Version compatibility
 
-The bridge and extension exchange a `protocolVersion` in the WebSocket `hello` handshake
-(the contract lives in `@monkeysee/protocol`). If their **major** versions don't match, the
-bridge refuses the connection and never serves tool calls to a mismatched extension — the
-popup shows an "incompatible bridge" status and the extension retries slowly until you
-update the older side. Pre-1.0, both sides are major `0` and move in lockstep through the
-workspace, so this only matters across a future breaking bump.
+The bridge and extension swap a `protocolVersion` in the WebSocket `hello` handshake (the
+contract lives in `@monkeysee/protocol`). If their **major** versions disagree, the bridge
+refuses the connection and never serves a tool call to a mismatched extension. The popup
+shows an "incompatible bridge" status and the extension retries slowly until you update the
+older side. Pre-1.0, both sides are major `0` and move in lockstep through the workspace, so
+this only bites across a future breaking bump.
 
-## Frames + screenshots (M2)
+## License
 
-- **Same-origin frames** are indexed automatically (`all_frames: true`). Elements inside a
-  same-origin iframe appear in `get_state` with `frameId != 0` and are clickable by index;
-  their boxes are reported in top-viewport coordinates. Cross-origin iframes are out of
-  scope for now.
-- **`screenshot`** returns the controlled tab's visible viewport as a PNG.
-- **`get_state({ withScreenshot: true })`** additionally returns that image with numbered
-  set-of-marks drawn at each in-viewport element's box.
+MIT. See [`LICENSE`](./LICENSE).
