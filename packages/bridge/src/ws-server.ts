@@ -1,5 +1,6 @@
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { RpcMethod, RpcRequest, RpcResponse, RpcError } from '@monkeysee/protocol'
+import type { BridgeEvent, RpcMethod, RpcRequest, RpcResponse, RpcError } from '@monkeysee/protocol'
+import { PROTOCOL_VERSION, isProtocolCompatible } from '@monkeysee/protocol'
 
 /** Error thrown when an RPC call fails; carries the structured RpcError. */
 export class RpcCallError extends Error {
@@ -56,7 +57,7 @@ export class WsServer {
     this.socket = ws
     console.error('[monkeysee] extension connected')
 
-    ws.on('message', data => this.onMessage(data.toString()))
+    ws.on('message', data => this.onMessage(data.toString(), ws))
     ws.on('close', () => {
       if (this.socket === ws) {
         this.socket = null
@@ -68,7 +69,7 @@ export class WsServer {
     ws.on('error', err => console.error('[monkeysee] socket error', err))
   }
 
-  private onMessage(raw: string): void {
+  private onMessage(raw: string, ws: WebSocket): void {
     let msg: unknown
     try {
       msg = JSON.parse(raw)
@@ -79,11 +80,8 @@ export class WsServer {
 
     // Unsolicited event (e.g. hello handshake).
     if (msg && typeof msg === 'object' && 'type' in msg) {
-      const ev = msg as { type: string; extensionVersion?: string }
-      if (ev.type === 'hello') {
-        this.extensionVersion = ev.extensionVersion ?? 'unknown'
-        console.error(`[monkeysee] hello from extension v${this.extensionVersion}`)
-      }
+      const ev = msg as { type: string; extensionVersion?: string; protocolVersion?: string }
+      if (ev.type === 'hello') this.onHello(ws, ev.extensionVersion, ev.protocolVersion)
       return
     }
 
@@ -96,6 +94,45 @@ export class WsServer {
     clearTimeout(p.timer)
     if (res.ok) p.resolve(res.result)
     else p.reject(new RpcCallError(res.error))
+  }
+
+  /**
+   * Handle the `hello` handshake. Refuse (and drop) any extension whose protocol major
+   * does not match the bridge's, so we never serve RPCs across an incompatible gap.
+   */
+  private onHello(ws: WebSocket, extensionVersion?: string, protocolVersion?: string): void {
+    const remoteProtocol = protocolVersion ?? 'unknown'
+    if (!isProtocolCompatible(remoteProtocol, PROTOCOL_VERSION)) {
+      console.error(
+        `[monkeysee] refusing extension: protocol ${remoteProtocol} is incompatible with ` +
+          `bridge protocol ${PROTOCOL_VERSION}. Update whichever side is older.`,
+      )
+      const refusal: BridgeEvent = {
+        type: 'incompatible',
+        bridgeProtocolVersion: PROTOCOL_VERSION,
+        extensionProtocolVersion: remoteProtocol,
+      }
+      try {
+        ws.send(JSON.stringify(refusal))
+      } catch {
+        // socket may already be closing
+      }
+      // Drop the connection; clear state if this was the active socket.
+      if (this.socket === ws) {
+        this.socket = null
+        this.extensionVersion = null
+      }
+      try {
+        ws.close(4001, 'protocol-incompatible')
+      } catch {
+        // ignore
+      }
+      return
+    }
+    this.extensionVersion = extensionVersion ?? 'unknown'
+    console.error(
+      `[monkeysee] hello from extension v${this.extensionVersion} (protocol ${remoteProtocol})`,
+    )
   }
 
   private failAllPending(error: RpcError): void {

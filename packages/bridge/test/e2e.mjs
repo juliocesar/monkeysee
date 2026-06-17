@@ -131,6 +131,40 @@ async function main() {
     /not connected|extension/i.test(textOf(notConnected)),
   )
 
+  // 1b) protocol enforcement: an extension with a mismatched major is refused and dropped.
+  const refusal = await new Promise(resolve => {
+    const bad = new WebSocket(`ws://localhost:${PORT}`)
+    let event = null
+    bad.on('open', () =>
+      bad.send(
+        JSON.stringify({ type: 'hello', extensionVersion: '9.9.9', protocolVersion: '99.0.0' }),
+      ),
+    )
+    bad.on('message', raw => {
+      try {
+        event = JSON.parse(raw.toString())
+      } catch {
+        // ignore
+      }
+    })
+    bad.on('close', () => resolve(event))
+    setTimeout(() => {
+      try {
+        bad.close()
+      } catch {
+        // ignore
+      }
+      resolve(event)
+    }, 1500)
+  })
+  check('incompatible extension receives a refusal event', refusal?.type === 'incompatible')
+  check(
+    'refusal reports the bridge protocol version',
+    typeof refusal?.bridgeProtocolVersion === 'string',
+  )
+  const stillNotConnected = await client.callTool({ name: 'get_state', arguments: {} })
+  check('bridge does not serve an extension it refused', stillNotConnected.isError === true)
+
   // Attach the fake extension and wait for the handshake to register.
   const ext = startFakeExtension()
   await new Promise((res, rej) => {

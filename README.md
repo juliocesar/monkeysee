@@ -8,8 +8,8 @@ We do **not** build an agent loop. Claude Code / Codex already have one. This pr
 exposes browser observation and actions as **MCP tools**. The terminal agent is the
 brain; this is the hands and eyes.
 
-See [`docs/STRUCTURE.md`](./docs/STRUCTURE.md) for a project map. (The full design doc,
-`plans/BROWSER_AGENT_PLAN.md`, is kept local-only.)
+Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map) and [`BUILD.md`](./docs/BUILD.md)
+(build/packaging gotchas).
 
 ## Packages
 
@@ -115,6 +115,15 @@ It does **not** appear for:
 
 So if you keep the backend on `content`, you will never see the banner; with the trusted
 backend on, you'll see it on each tab the moment MonkeySee first dispatches input there.
+
+## Version compatibility
+
+The bridge and extension exchange a `protocolVersion` in the WebSocket `hello` handshake
+(the contract lives in `@monkeysee/protocol`). If their **major** versions don't match, the
+bridge refuses the connection and never serves tool calls to a mismatched extension — the
+popup shows an "incompatible bridge" status and the extension retries slowly until you
+update the older side. Pre-1.0, both sides are major `0` and move in lockstep through the
+workspace, so this only matters across a future breaking bump.
 
 ## Frames + screenshots (M2)
 

@@ -41,4 +41,15 @@ export interface RpcError {
 /** Unsolicited SW -> bridge messages (e.g. connection hello). */
 export type RpcEvent = { type: 'hello'; extensionVersion: string; protocolVersion: string }
 
+/**
+ * Bridge -> SW message refusing a connection whose protocol major does not match the
+ * bridge's. Sent just before the bridge drops the socket, so the extension can surface a
+ * clear "incompatible bridge" status instead of a bare disconnect.
+ */
+export type BridgeEvent = {
+  type: 'incompatible'
+  bridgeProtocolVersion: string
+  extensionProtocolVersion: string
+}
+
 export type { PageState }

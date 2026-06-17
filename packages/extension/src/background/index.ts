@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     typeof msg === 'object' &&
     (msg as { channel?: string }).channel === 'monkeysee-popup'
   ) {
-    sendResponse({ connected: client.isConnected() })
+    sendResponse({ connected: client.isConnected(), incompatible: client.getIncompatible() })
     return true
   }
   return false

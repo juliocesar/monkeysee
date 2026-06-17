@@ -1,8 +1,12 @@
-import type { RpcRequest, RpcResponse } from '@monkeysee/protocol'
+import type { BridgeEvent, RpcRequest, RpcResponse } from '@monkeysee/protocol'
 import { PROTOCOL_VERSION } from '@monkeysee/protocol'
 
 const KEEPALIVE_ALARM = 'monkeysee-keepalive'
 const MAX_BACKOFF = 5_000
+/** Reconnect slowly after a protocol refusal — fast retries would only be refused again. */
+const INCOMPATIBLE_RETRY = 30_000
+
+export type Incompatible = Omit<BridgeEvent, 'type'>
 
 /**
  * Maintains the connection to the bridge: connect, reconnect with backoff, and a
@@ -14,6 +18,8 @@ export class WsClient {
   private backoff = 250
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connected = false
+  /** Set when the bridge refused us for an incompatible protocol major; null otherwise. */
+  private incompatible: Incompatible | null = null
 
   constructor(
     private readonly url: string,
@@ -30,6 +36,11 @@ export class WsClient {
 
   isConnected(): boolean {
     return this.connected
+  }
+
+  /** The refusal details if the bridge rejected us as incompatible, else null. */
+  getIncompatible(): Incompatible | null {
+    return this.incompatible
   }
 
   private connect(): void {
@@ -51,6 +62,8 @@ export class WsClient {
     ws.addEventListener('open', () => {
       this.connected = true
       this.backoff = 250
+      // Fresh attempt: re-handshake. If still incompatible, the bridge resets this below.
+      this.incompatible = null
       this.send({
         type: 'hello',
         extensionVersion: chrome.runtime.getManifest().version,
@@ -74,8 +87,13 @@ export class WsClient {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
-    const delay = this.backoff
-    this.backoff = Math.min(MAX_BACKOFF, this.backoff * 2)
+    let delay: number
+    if (this.incompatible) {
+      delay = INCOMPATIBLE_RETRY
+    } else {
+      delay = this.backoff
+      this.backoff = Math.min(MAX_BACKOFF, this.backoff * 2)
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connect()
@@ -91,12 +109,31 @@ export class WsClient {
   }
 
   private async onMessage(data: unknown): Promise<void> {
-    let req: RpcRequest
+    let msg: unknown
     try {
-      req = JSON.parse(String(data)) as RpcRequest
+      msg = JSON.parse(String(data))
     } catch {
       return
     }
+
+    // Bridge -> SW control events (e.g. an incompatible-protocol refusal).
+    if (msg && typeof msg === 'object' && 'type' in msg) {
+      const ev = msg as BridgeEvent
+      if (ev.type === 'incompatible') {
+        this.incompatible = {
+          bridgeProtocolVersion: ev.bridgeProtocolVersion,
+          extensionProtocolVersion: ev.extensionProtocolVersion ?? PROTOCOL_VERSION,
+        }
+        console.error(
+          `[monkeysee] bridge refused connection: protocol ${PROTOCOL_VERSION} is ` +
+            `incompatible with bridge protocol ${ev.bridgeProtocolVersion}. Update whichever ` +
+            'side is older. Will retry slowly.',
+        )
+      }
+      return
+    }
+
+    const req = msg as RpcRequest
     if (!req || typeof req.id !== 'string' || typeof req.method !== 'string') return
     const res = await this.onRequest(req)
     this.send(res)

@@ -11,7 +11,12 @@ const savedEl = document.getElementById('saved')
 chrome.runtime.sendMessage({ channel: 'monkeysee-popup' }, res => {
   const connected = res && res.connected
   dot.classList.toggle('on', !!connected)
-  statusEl.textContent = connected ? 'connected to bridge' : 'bridge not connected'
+  if (res && res.incompatible) {
+    const i = res.incompatible
+    statusEl.textContent = `incompatible bridge (bridge protocol ${i.bridgeProtocolVersion}, extension ${i.extensionProtocolVersion}) — update the older side`
+  } else {
+    statusEl.textContent = connected ? 'connected to bridge' : 'bridge not connected'
+  }
 })
 
 chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => {
