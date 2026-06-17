@@ -21,9 +21,9 @@ Let's be clear about who does the thinking. MonkeySee has **no agent loop, no LL
 fast, reliable set of hands and eyeballs it has always wanted.
 
 ```
-  the brain                          the hands & eyes
+  the brain                      the hands & eyes
 ┌─────────────┐   MCP (stdio)   ┌──────────────────┐   ws://localhost:8787   ┌───────────┐
-│ Claude Code │ ───────────────▶│ monkeysee-bridge │ ──────────────────────▶│ extension │
+│ Claude Code │────────────────▶│ monkeysee-bridge │────────────────────────▶│ extension │
 │   / Codex   │                 │  (dumb router)   │                         │ SW + DOM  │
 └─────────────┘                 └──────────────────┘                         └───────────┘
 ```
