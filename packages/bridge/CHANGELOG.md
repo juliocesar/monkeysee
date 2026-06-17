@@ -1,5 +1,11 @@
 # monkeysee-bridge
 
+## 0.2.0
+
+### Minor Changes
+
+- Add `init` and `doctor` subcommands. `monkeysee-bridge init` wires the server into an MCP client in one command (Claude Code via the official CLI or a `.mcp.json`, or Codex via `~/.codex/config.toml`) and prints the bundled extension path; flags: `--scope`, `--client`, `--print`. `monkeysee-bridge doctor` checks the live bridge/extension link and reports OK / DOWN / INCOMPATIBLE.
+
 ## 0.1.0
 
 ### Minor Changes
