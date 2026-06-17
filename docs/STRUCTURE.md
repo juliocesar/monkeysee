@@ -28,16 +28,20 @@ Bundled with esbuild (ESM Node); types emitted by `tsc`. **Logs only to stderr.*
 
 | File                | Purpose                                                                       |
 | ------------------- | ----------------------------------------------------------------------------- |
-| `src/index.ts`      | bin entry: start WS server + MCP stdio transport; signal handling             |
+| `src/index.ts`      | bin entry: start WS server + MCP stdio transport; signal handling; prints bundled `dist/extension` path to stderr |
+| `build.mjs`         | esbuild the server, then build + copy the extension into `dist/extension/`     |
+| `scripts/postinstall.mjs` | after `npm install`, prints the bundled extension path + Load-unpacked steps (silent if `dist/extension` absent) |
 | `src/ws-server.ts`  | WS server; request/response correlation by id; per-call timeout; `RpcCallError`; `hello` protocol-major check (refuses incompatible extensions) |
 | `src/mcp-server.ts` | builds the `McpServer` and registers tools                                    |
 | `src/tools.ts`      | every MCP tool (name, description, zod schema, handler); `done` grounding here  |
 | `test/e2e.mjs`      | browser-free end-to-end test (fake extension WS + real MCP client). `pnpm test` |
 
-### `packages/extension` — `extension` (MV3; published to Chrome Web Store)
+### `packages/extension` — `extension` (MV3; bundled into `@monkeysee/bridge`)
 
 The only component with DOM access. SW + content built with esbuild (SW = ESM,
-content = IIFE). Load unpacked from `dist/`.
+content = IIFE). Load unpacked from `dist/`. Not published on its own and not on the Chrome
+Web Store — the bridge build copies this `dist/` into `@monkeysee/bridge`'s `dist/extension/`
+so one npm install ships the server and the extension together.
 
 **Background (service worker — dumb router + lifecycle):**
 

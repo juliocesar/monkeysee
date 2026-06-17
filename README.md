@@ -17,7 +17,7 @@ Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project m
 | --------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `@monkeysee/protocol` | Shared wire types + zod schemas (the compatibility spine). Published to npm.                                |
 | `@monkeysee/bridge`   | MCP server (stdio) + WebSocket server. Translates tool calls to RPC. Published to npm with a `bin`.         |
-| `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Published to the Chrome Web Store. |
+| `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Built into `@monkeysee/bridge` and loaded unpacked (no Chrome Web Store). |
 
 ## Architecture
 
@@ -25,6 +25,26 @@ Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project m
 Claude Code / Codex  ──MCP(stdio)──▶  @monkeysee/bridge  ──ws://localhost:8787──▶  extension SW  ──▶  content script (DOM)
    (the brain)                         (dumb router)                                (dumb router)      (the smart part)
 ```
+
+## Install (as a user)
+
+One command installs both the MCP server and the extension — there is no Chrome Web Store
+listing:
+
+```bash
+npm install -g @monkeysee/bridge
+```
+
+Install prints where the bundled extension lives. Open `chrome://extensions`, enable
+**Developer mode**, click **Load unpacked**, and select that path. Then point your MCP
+client at the bridge, e.g. in `.mcp.json`:
+
+```json
+{ "mcpServers": { "monkeysee": { "command": "npx", "args": ["-y", "@monkeysee/bridge"] } } }
+```
+
+The bridge also prints the extension path to stderr on startup, so it's in your MCP logs
+if you miss it during install.
 
 ## Develop
 
@@ -43,7 +63,9 @@ The bridge is fully verifiable from the CLI (`pnpm test`). The full loop needs C
 
 1. **Build:** `pnpm build`.
 2. **Load the extension:** open `chrome://extensions`, enable Developer mode,
-   "Load unpacked", select `packages/extension/dist`.
+   "Load unpacked", select `packages/extension/dist`. (When you install the published
+   `@monkeysee/bridge`, the extension ships inside it — `npm install` and the bridge's
+   startup line both print the path to load instead.)
 3. **Start Claude Code** in this directory. The `.mcp.json` here launches the bridge
    automatically (MCP over stdio). The extension's service worker connects to the
    bridge's WebSocket server within a few seconds — confirm the green dot in the

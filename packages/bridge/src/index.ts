@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { WsServer } from './ws-server'
 import { createMcpServer } from './mcp-server'
@@ -12,6 +14,14 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport()
   await server.connect(transport)
   console.error('[monkeysee] MCP server connected over stdio')
+
+  // The unpacked extension is bundled next to this bin (dist/extension). Point the
+  // user at it so they can chrome://extensions -> Load unpacked. stderr only.
+  const extPath = fileURLToPath(new URL('./extension', import.meta.url))
+  if (existsSync(extPath)) {
+    console.error(`[monkeysee] extension: ${extPath}`)
+    console.error('[monkeysee] load it via chrome://extensions -> Load unpacked')
+  }
 
   const shutdown = () => {
     console.error('[monkeysee] shutting down')
