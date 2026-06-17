@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { WsServer } from './ws-server'
 import { createMcpServer } from './mcp-server'
+import { runInit } from './init'
+import { runDoctor } from './doctor'
 
 // stdout is the MCP JSON-RPC channel. ALL human-facing logging goes to stderr.
 const port = Number(process.env.MONKEYSEE_WS_PORT ?? '8787')
@@ -33,7 +35,20 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown)
 }
 
-main().catch(err => {
-  console.error('[monkeysee] fatal', err)
-  process.exit(1)
-})
+// Subcommands wire the server into a client (`init`) or check the live link (`doctor`),
+// then exit. Any other invocation (incl. no args, how MCP clients launch us) runs the
+// server over stdio.
+const subcommand = process.argv[2]
+if (subcommand === 'init') {
+  runInit(process.argv.slice(3))
+} else if (subcommand === 'doctor') {
+  runDoctor().catch(err => {
+    console.error('[monkeysee] doctor failed', err)
+    process.exit(1)
+  })
+} else {
+  main().catch(err => {
+    console.error('[monkeysee] fatal', err)
+    process.exit(1)
+  })
+}

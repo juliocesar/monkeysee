@@ -76,20 +76,52 @@ One install ships both halves. There is no Chrome Web Store listing to hunt for.
 npm install -g monkeysee-bridge
 ```
 
-The install prints exactly where the bundled extension lives. Then teach Chrome about it:
+Then wire it up. The fastest path registers the MCP server and prints the extension path
+in one step:
 
-1. Open `chrome://extensions`
-2. Flip on **Developer mode** (top-right)
-3. Click **Load unpacked** and pick the path the installer printed
+```bash
+monkeysee-bridge init
+```
 
-Finally, point your MCP client at the bridge. For example, in `.mcp.json`:
+That registers `monkeysee` with Claude Code for every project (user scope) and prints
+where the bundled extension lives. Flags: `--scope project` writes a repo-local
+`.mcp.json` instead of your user config, `--client codex` wires up Codex
+(`~/.codex/config.toml`) instead of Claude Code, and `--print` shows the config without
+writing anything. See `monkeysee-bridge init --help`.
+
+Prefer to wire it yourself? Register the server for every project with one command:
+
+```bash
+claude mcp add monkeysee -s user -- npx -y monkeysee-bridge
+```
+
+...or drop this into a project's `.mcp.json` (it then applies only when you run Claude
+Code from that folder):
 
 ```json
 { "mcpServers": { "monkeysee": { "command": "npx", "args": ["-y", "monkeysee-bridge"] } } }
 ```
 
-Missed the path during install? No problem. The bridge reprints it to stderr every time it
-starts, so it's right there in your MCP logs.
+Either way, one step stays manual because no installer can do it for you: teach Chrome
+about the bundled extension.
+
+1. Open `chrome://extensions`
+2. Flip on **Developer mode** (top-right)
+3. Click **Load unpacked** and pick the path `init` (or the install) printed
+
+Missed the path? No problem. The bridge reprints it to stderr every time it starts, so
+it's right there in your MCP logs.
+
+Once the extension is loaded, confirm the link is live:
+
+```bash
+monkeysee-bridge doctor
+```
+
+It opens the WebSocket, waits for the extension to connect, and reports `OK` (with the
+extension version), `DOWN` (extension not loaded or Chrome not running), or `INCOMPATIBLE`
+(a protocol-version mismatch). If a bridge is already running on the port, it says so
+instead of fighting for it.
 
 ## The 60-second demo
 
