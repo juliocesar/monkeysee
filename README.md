@@ -36,6 +36,18 @@ through it (**followers**) over a second local port (`8788`). Each session track
 tab, so an action in terminal A hits A's tab and an action in terminal B hits B's. If the
 leader's terminal closes, a surviving session takes over automatically and keeps its tab.
 
+```
+                   ┌───────────────────┐  ws://localhost:8787  ┌───────────┐
+session A ─stdio─▶ │ bridge (LEADER)   │──────────────────────▶│ extension │──▶ Chrome
+                   └───────────────────┘                       └───────────┘
+                       ▲
+                       │ ws://localhost:8788  (control relay)
+                       │
+                   ┌───────────────────┐
+session B ─stdio─▶ │ bridge (FOLLOWER) │  proxies its RPCs to the leader
+                   └───────────────────┘
+```
+
 ## What your agent can do
 
 Once it's wired up, your agent gets a toolbox:
