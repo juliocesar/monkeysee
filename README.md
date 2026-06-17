@@ -12,7 +12,7 @@ your everything.
 
 ## Demo
 
-<video src="https://github.com/juliocesar/monkeysee/raw/main/docs/demo.mp4" controls muted playsinline width="640"></video>
+https://github.com/user-attachments/assets/58788fe4-6977-47d0-a47e-14f965c47e8d
 
 ## This is not an agent
 
