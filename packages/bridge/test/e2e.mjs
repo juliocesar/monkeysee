@@ -100,8 +100,38 @@ function startFakeExtension() {
       case 'open_tab':
         res = { id: req.id, ok: true, result: { tabId: 7 } }
         break
+      case 'list_tabs':
+        res = {
+          id: req.id,
+          ok: true,
+          result: {
+            controlledTabId: 7,
+            tabs: [
+              {
+                tabId: 7,
+                url: 'https://en.wikipedia.org/wiki/Wales',
+                title: 'Wales - Wikipedia',
+                active: true,
+                controlled: true,
+              },
+              {
+                tabId: 8,
+                url: 'https://example.com/',
+                title: 'Example',
+                active: false,
+                controlled: false,
+              },
+            ],
+          },
+        }
+        break
+      case 'switch_tab':
+        // Echo the targeted tab so the test can assert the envelope tabId was threaded.
+        res = { id: req.id, ok: true, result: { tabId: req.tabId } }
+        break
       default:
-        res = { id: req.id, ok: true, result: { ok: true } }
+        // Echo tabId so tabId-targeting through the RPC envelope is observable.
+        res = { id: req.id, ok: true, result: { ok: true, tabId: req.tabId } }
     }
     ws.send(JSON.stringify(res))
   })
@@ -183,6 +213,9 @@ async function main() {
       'click',
       'type',
       'open_tab',
+      'list_tabs',
+      'switch_tab',
+      'close_tab',
       'navigate',
       'wait_for_load',
       'screenshot',
@@ -221,6 +254,27 @@ async function main() {
   check(
     'get_state withScreenshot attaches an image block',
     (shotState.content ?? []).some(c => c.type === 'image' && c.data === TINY_PNG),
+  )
+
+  // 4d) multi-tab: list_tabs enumerates open tabs
+  const list = await client.callTool({ name: 'list_tabs', arguments: {} })
+  check('list_tabs succeeds', !list.isError)
+  check('list_tabs enumerates multiple tabs', textOf(list).includes('example.com'))
+
+  // 4e) switch_tab threads the target through the RPC envelope (not the params body)
+  const switched = await client.callTool({ name: 'switch_tab', arguments: { tabId: 8 } })
+  check('switch_tab succeeds', !switched.isError)
+  check('switch_tab targets the requested tab', textOf(switched).includes('"tabId": 8'))
+
+  // 4f) an optional tabId on a normal tool reaches the extension as the RPC target
+  const targeted = await client.callTool({
+    name: 'navigate',
+    arguments: { url: 'https://example.com/', tabId: 8 },
+  })
+  check('navigate accepts an explicit tabId', !targeted.isError)
+  check(
+    'explicit tabId reaches the extension as the RPC target',
+    textOf(targeted).includes('"tabId": 8'),
   )
 
   // 5) done grounds the answer with url + snippet

@@ -116,6 +116,45 @@ async function route(req: RpcRequest): Promise<unknown> {
       const tabId = await resolveTab(req)
       return { imageBase64: await shot.capture(tabId) }
     }
+    case 'list_tabs': {
+      const tabs = await chrome.tabs.query({})
+      return {
+        controlledTabId,
+        tabs: tabs
+          .filter(t => typeof t.id === 'number')
+          .map(t => ({
+            tabId: t.id as number,
+            url: t.url ?? '',
+            title: t.title ?? '',
+            active: t.active === true,
+            controlled: t.id === controlledTabId,
+          })),
+      }
+    }
+    case 'switch_tab': {
+      const tabId = requireTabId(req)
+      try {
+        await chrome.tabs.get(tabId)
+      } catch {
+        throw new RouterError({ code: 'not_found', message: `Tab ${tabId} does not exist.` })
+      }
+      controlledTabId = tabId
+      await bringTabToFront(tabId)
+      return { tabId }
+    }
+    case 'close_tab': {
+      const tabId = requireTabId(req)
+      try {
+        await chrome.tabs.remove(tabId)
+      } catch {
+        throw new RouterError({
+          code: 'not_found',
+          message: `Tab ${tabId} could not be closed (already gone?).`,
+        })
+      }
+      if (controlledTabId === tabId) controlledTabId = null
+      return { ok: true, closed: tabId }
+    }
     default: {
       if (CONTENT_METHODS.has(req.method as ContentMethod)) {
         const tabId = await resolveTab(req)
@@ -130,6 +169,14 @@ async function route(req: RpcRequest): Promise<unknown> {
       throw new RouterError({ code: 'internal', message: `Unknown method ${req.method}` })
     }
   }
+}
+
+/** Tab-management actions name their target explicitly; there is no "default" tab to fall back to. */
+function requireTabId(req: RpcRequest): number {
+  if (typeof req.tabId !== 'number') {
+    throw new RouterError({ code: 'not_found', message: 'A tabId is required for this action.' })
+  }
+  return req.tabId
 }
 
 async function resolveTab(req: RpcRequest): Promise<number> {

@@ -2,6 +2,9 @@ import type { PageState } from './state.js'
 
 export type RpcMethod =
   | 'open_tab'
+  | 'list_tabs'
+  | 'switch_tab'
+  | 'close_tab'
   | 'navigate'
   | 'go_back'
   | 'go_forward'

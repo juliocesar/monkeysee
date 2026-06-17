@@ -15,6 +15,9 @@ import {
   PressParams,
   TypeTextParams,
   OpenTabParams,
+  ListTabsParams,
+  SwitchTabParams,
+  CloseTabParams,
   NavigateParams,
   ExtractTextParams,
   WaitForLoadParams,
@@ -49,15 +52,25 @@ function describeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-/** Forward params straight to the extension over RPC and return the JSON result. */
+/**
+ * Pull an optional `tabId` target out of tool args; the rest are the RPC params. `tabId`
+ * rides on the RpcRequest envelope (the extension routes by it), not inside `params`.
+ */
+function splitTab(args: unknown): { tabId: number | undefined; params: Record<string, unknown> } {
+  const { tabId, ...params } = (args ?? {}) as Record<string, unknown>
+  return { tabId: typeof tabId === 'number' ? tabId : undefined, params }
+}
+
+/** Forward tool args straight to the extension over RPC and return the JSON result. */
 async function forward(
   ws: WsServer,
   method: RpcMethod,
-  params: unknown,
+  args: unknown,
   opts?: { timeoutMs?: number },
 ): Promise<CallToolResult> {
   try {
-    const result = await ws.call(method, params, opts)
+    const { tabId, params } = splitTab(args)
+    const result = await ws.call(method, params, { ...opts, tabId })
     return textResult(result)
   } catch (e) {
     return errorResult(describeError(e))
@@ -68,6 +81,7 @@ const OBSERVE = 'Observation'
 const SEMANTIC = 'Semantic action (operates on an index from get_state)'
 const SPATIAL = 'Spatial/raw action (CSS px, viewport-relative)'
 const NAV = 'Navigation / lifecycle'
+const TABS = 'Tab management (multi-tab control)'
 
 export function registerTools(server: McpServer, ws: WsServer): void {
   // ---- Observation ----
@@ -79,7 +93,10 @@ export function registerTools(server: McpServer, ws: WsServer): void {
     },
     async args => {
       try {
-        const state = (await ws.call('get_state', args)) as PageState & { screenshot?: string }
+        const { tabId, params } = splitTab(args)
+        const state = (await ws.call('get_state', params, { tabId })) as PageState & {
+          screenshot?: string
+        }
         const { screenshot, ...rest } = state
         const content: CallToolResult['content'] = [
           { type: 'text', text: JSON.stringify(rest, null, 2) },
@@ -98,9 +115,10 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${OBSERVE}: capture the controlled tab's visible viewport as a PNG image. Use when the indexed element list is not enough and you need to see the page.`,
       inputSchema: ScreenshotParams.shape,
     },
-    async () => {
+    async args => {
       try {
-        const r = (await ws.call('screenshot', {})) as { imageBase64: string }
+        const { tabId } = splitTab(args)
+        const r = (await ws.call('screenshot', {}, { tabId })) as { imageBase64: string }
         return imageResult(r.imageBase64)
       } catch (e) {
         return errorResult(describeError(e))
@@ -226,6 +244,36 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       inputSchema: OpenTabParams.shape,
     },
     async args => forward(ws, 'open_tab', args),
+  )
+
+  // ---- Tab management (multi-tab control) ----
+  // Every observation/action/navigation tool also accepts an optional `tabId` to target a
+  // specific tab from list_tabs without changing which tab is controlled.
+  server.registerTool(
+    'list_tabs',
+    {
+      description: `${TABS}: list all open tabs as { tabId, url, title, active, controlled }, plus the current controlledTabId. Use this to discover tabs to switch to or target via a tool's optional \`tabId\`.`,
+      inputSchema: ListTabsParams.shape,
+    },
+    async () => forward(ws, 'list_tabs', {}),
+  )
+
+  server.registerTool(
+    'switch_tab',
+    {
+      description: `${TABS}: make \`tabId\` the controlled tab (where default-target actions go) and bring it to the front.`,
+      inputSchema: SwitchTabParams.shape,
+    },
+    async args => forward(ws, 'switch_tab', args),
+  )
+
+  server.registerTool(
+    'close_tab',
+    {
+      description: `${TABS}: close the tab with \`tabId\`. If it was the controlled tab, control falls back to the active tab on the next action.`,
+      inputSchema: CloseTabParams.shape,
+    },
+    async args => forward(ws, 'close_tab', args),
   )
 
   server.registerTool(

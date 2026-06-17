@@ -74,7 +74,14 @@ content = IIFE). Load unpacked from `dist/`.
 - **Semantic actions** (by `index`): `click`, `type`, `select_option`, `hover`, `focus`
 - **Spatial/raw:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
 - **Navigation:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
+- **Tabs:** `list_tabs` (id, url, title, active, controlled), `switch_tab(tabId)`, `close_tab(tabId)`
 - **Control:** `done` (grounds the answer with URL + page snippet; handled in the bridge)
+
+Every observation/action/navigation tool also takes an optional `tabId` to target a
+specific tab without changing which tab is controlled. Omitted, it operates on the
+controlled tab (set by `open_tab`/`switch_tab`, else the active tab). The target rides on
+the `RpcRequest` envelope (`tabId`), not inside the tool params; the bridge splits it off
+and the SW router resolves it via `pickTab`/`resolveTab`.
 
 ## Action backends
 
