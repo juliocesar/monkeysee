@@ -1,0 +1,38 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8C2F4A"/>
+      <stop offset="1" stop-color="#5E1A2E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- brand tile -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#bg)"/>
+
+  <!-- ears -->
+  <circle cx="30" cy="54" r="19" fill="#F6E6CE"/>
+  <circle cx="98" cy="54" r="19" fill="#F6E6CE"/>
+  <circle cx="30" cy="54" r="10" fill="#E9C8A0"/>
+  <circle cx="98" cy="54" r="10" fill="#E9C8A0"/>
+
+  <!-- head -->
+  <ellipse cx="64" cy="66" rx="40" ry="41" fill="#F6E6CE"/>
+
+  <!-- muzzle -->
+  <ellipse cx="64" cy="83" rx="27" ry="22" fill="#FFF6E6"/>
+
+  <!-- eyes (the "see") -->
+  <circle cx="47" cy="58" r="11" fill="#FFFFFF"/>
+  <circle cx="81" cy="58" r="11" fill="#FFFFFF"/>
+  <circle cx="48" cy="59" r="8" fill="#3A2316"/>
+  <circle cx="80" cy="59" r="8" fill="#3A2316"/>
+  <circle cx="50.5" cy="56" r="2.2" fill="#FFFFFF"/>
+  <circle cx="82.5" cy="56" r="2.2" fill="#FFFFFF"/>
+
+  <!-- nostrils -->
+  <ellipse cx="58" cy="80" rx="2.4" ry="3" fill="#C9A36F"/>
+  <ellipse cx="70" cy="80" rx="2.4" ry="3" fill="#C9A36F"/>
+
+  <!-- smile -->
+  <path d="M52 90 Q64 99 76 90" stroke="#C9A36F" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+</svg>
