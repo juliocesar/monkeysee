@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { PageState, RpcMethod } from '@monkeysee/protocol'
+import type { PageState, RpcMethod } from 'monkeysee-protocol'
 import {
   GetStateParams,
   ClickParams,
@@ -25,7 +25,7 @@ import {
   GoForwardParams,
   ScreenshotParams,
   DoneParams,
-} from '@monkeysee/protocol'
+} from 'monkeysee-protocol'
 import { RpcCallError, type WsServer } from './ws-server'
 
 function textResult(data: unknown): CallToolResult {

@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { PROTOCOL_VERSION } from '@monkeysee/protocol'
+import { PROTOCOL_VERSION } from 'monkeysee-protocol'
 import { registerTools } from './tools'
 import type { WsServer } from './ws-server'
 

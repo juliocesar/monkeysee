@@ -19,7 +19,7 @@ fast, reliable set of hands and eyeballs it has always wanted.
 ```
   the brain                          the hands & eyes
 ┌─────────────┐   MCP (stdio)   ┌──────────────────┐   ws://localhost:8787   ┌───────────┐
-│ Claude Code │ ───────────────▶│ @monkeysee/bridge│ ───────────────────────▶│ extension │
+│ Claude Code │ ───────────────▶│ monkeysee-bridge │ ──────────────────────▶│ extension │
 │   / Codex   │                 │  (dumb router)   │                         │ SW + DOM  │
 └─────────────┘                 └──────────────────┘                         └───────────┘
 ```
@@ -43,7 +43,7 @@ Once it's wired up, your agent gets a toolbox:
 One install ships both halves. There is no Chrome Web Store listing to hunt for.
 
 ```bash
-npm install -g @monkeysee/bridge
+npm install -g monkeysee-bridge
 ```
 
 The install prints exactly where the bundled extension lives. Then teach Chrome about it:
@@ -55,7 +55,7 @@ The install prints exactly where the bundled extension lives. Then teach Chrome 
 Finally, point your MCP client at the bridge. For example, in `.mcp.json`:
 
 ```json
-{ "mcpServers": { "monkeysee": { "command": "npx", "args": ["-y", "@monkeysee/bridge"] } } }
+{ "mcpServers": { "monkeysee": { "command": "npx", "args": ["-y", "monkeysee-bridge"] } } }
 ```
 
 Missed the path during install? No problem. The bridge reprints it to stderr every time it
@@ -68,7 +68,7 @@ Chrome:
 
 1. **Build:** `pnpm build`
 2. **Load the extension:** `chrome://extensions` → Developer mode → Load unpacked →
-   `packages/extension/dist`. (The published `@monkeysee/bridge` ships the extension inside
+   `packages/extension/dist`. (The published `monkeysee-bridge` ships the extension inside
    it, and both the installer and the bridge's startup line print the path to load.)
 3. **Start Claude Code** here. Copy `.mcp.json.example` to `.mcp.json` first (it's
    git-ignored, so it stays local). That entry launches the bridge over stdio. Within a few
@@ -101,8 +101,8 @@ Three packages in a pnpm workspace:
 
 | Package               | Role                                                                                                            |
 | --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `@monkeysee/protocol` | Shared wire types + zod schemas. The compatibility spine. Published to npm.                                     |
-| `@monkeysee/bridge`   | MCP server (stdio) + WebSocket server. Translates tool calls to RPC. Published to npm with a `bin`.             |
+| `monkeysee-protocol` | Shared wire types + zod schemas. The compatibility spine. Published to npm.                                     |
+| `monkeysee-bridge`   | MCP server (stdio) + WebSocket server. Translates tool calls to RPC. Published to npm with a `bin`.             |
 | `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Bundled into the bridge, loaded unpacked. |
 
 The deep dive lives in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map
@@ -179,7 +179,7 @@ on and you'll see it on each tab the first time MonkeySee dispatches input there
 ## Version compatibility
 
 The bridge and extension swap a `protocolVersion` in the WebSocket `hello` handshake (the
-contract lives in `@monkeysee/protocol`). If their **major** versions disagree, the bridge
+contract lives in `monkeysee-protocol`). If their **major** versions disagree, the bridge
 refuses the connection and never serves a tool call to a mismatched extension. The popup
 shows an "incompatible bridge" status and the extension retries slowly until you update the
 older side. Pre-1.0, both sides are major `0` and move in lockstep through the workspace, so

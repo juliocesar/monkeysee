@@ -1,5 +1,5 @@
-import type { BridgeEvent, RpcRequest, RpcResponse } from '@monkeysee/protocol'
-import { PROTOCOL_VERSION } from '@monkeysee/protocol'
+import type { BridgeEvent, RpcRequest, RpcResponse } from 'monkeysee-protocol'
+import { PROTOCOL_VERSION } from 'monkeysee-protocol'
 
 const KEEPALIVE_ALARM = 'monkeysee-keepalive'
 const MAX_BACKOFF = 5_000

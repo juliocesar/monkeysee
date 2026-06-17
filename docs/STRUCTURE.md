@@ -4,13 +4,13 @@ A pnpm workspace with three packages. The terminal agent (Claude Code / Codex) i
 brain; this repo is the hands and eyes, exposed as **MCP tools**.
 
 ```
-Claude Code ──MCP(stdio)──▶ @monkeysee/bridge ──ws://localhost:8787──▶ extension SW ──▶ content script (DOM)
+Claude Code ──MCP(stdio)──▶ monkeysee-bridge ──ws://localhost:8787──▶ extension SW ──▶ content script (DOM)
    (brain)                   (dumb router)                            (dumb router)     (smart: eyes + hands)
 ```
 
 ## Packages
 
-### `packages/protocol` — `@monkeysee/protocol` (published to npm)
+### `packages/protocol` — `monkeysee-protocol` (published to npm)
 
 The wire spine: shared types + zod schemas. No logic. Built with `tsc` (emits JS + d.ts).
 
@@ -21,7 +21,7 @@ The wire spine: shared types + zod schemas. No logic. Built with `tsc` (emits JS
 | `src/tools.ts` | zod param schemas for every MCP tool (`GetStateParams`, `ClickParams`, …)    |
 | `src/index.ts` | re-exports + `PROTOCOL_VERSION` + `isProtocolCompatible` (the `hello` handshake check) |
 
-### `packages/bridge` — `@monkeysee/bridge` (published to npm, has a `bin`)
+### `packages/bridge` — `monkeysee-bridge` (published to npm, has a `bin`)
 
 MCP server (stdio) + WebSocket server. Dumb translator: MCP tool call → WS RPC → result.
 Bundled with esbuild (ESM Node); types emitted by `tsc`. **Logs only to stderr.**
@@ -36,11 +36,11 @@ Bundled with esbuild (ESM Node); types emitted by `tsc`. **Logs only to stderr.*
 | `src/tools.ts`      | every MCP tool (name, description, zod schema, handler); `done` grounding here  |
 | `test/e2e.mjs`      | browser-free end-to-end test (fake extension WS + real MCP client). `pnpm test` |
 
-### `packages/extension` — `extension` (MV3; bundled into `@monkeysee/bridge`)
+### `packages/extension` — `extension` (MV3; bundled into `monkeysee-bridge`)
 
 The only component with DOM access. SW + content built with esbuild (SW = ESM,
 content = IIFE). Load unpacked from `dist/`. Not published on its own and not on the Chrome
-Web Store — the bridge build copies this `dist/` into `@monkeysee/bridge`'s `dist/extension/`
+Web Store — the bridge build copies this `dist/` into `monkeysee-bridge`'s `dist/extension/`
 so one npm install ships the server and the extension together.
 
 **Background (service worker — dumb router + lifecycle):**
@@ -115,7 +115,7 @@ it disagrees.
 1. **MCP, not a custom loop.** We expose tools only; the CLI agent reasons and decides
    "done". No LLM/AI-SDK code lives here.
 2. **Monorepo (pnpm workspace + Changesets, no Turborepo).** Justified by publishing
-   `@monkeysee/protocol` + `@monkeysee/bridge` to npm that, together with the bundled
+   `monkeysee-protocol` + `monkeysee-bridge` to npm that, together with the bundled
    extension, must share a wire protocol in lockstep. Kept light on purpose.
 3. **Page representation: indexed element list with bounding boxes** (`PageState`) — not
    full HTML, not screenshots by default. One payload serves semantic actions
@@ -139,7 +139,7 @@ it disagrees.
    modules), service worker = **ESM**, bridge = **ESM Node**. No Vite/WXT/@crxjs.
 10. **Safety from M0 (minimal).** Domain allowlist + a confirmation-gate concept for
     destructive actions; the agent drives a logged-in browser, so treat it as such.
-11. **Ship the extension unpacked, bundled in `@monkeysee/bridge` — no Chrome Web Store.**
+11. **Ship the extension unpacked, bundled in `monkeysee-bridge` — no Chrome Web Store.**
     One `npm install` delivers the server and the extension's `dist/` together; users Load
     unpacked from a path that `postinstall` and the bridge's startup line both print. Avoids
     a second distribution channel, Web Store review latency, and a separately-versioned

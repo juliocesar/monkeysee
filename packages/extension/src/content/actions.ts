@@ -1,4 +1,4 @@
-import type { RpcError } from '@monkeysee/protocol'
+import type { RpcError } from 'monkeysee-protocol'
 import { resolveHandle } from './handles'
 
 /** Error carrying a structured RpcError code, surfaced back to the agent. */

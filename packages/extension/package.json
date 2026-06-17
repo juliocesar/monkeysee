@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@monkeysee/protocol": "workspace:*"
+    "monkeysee-protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",

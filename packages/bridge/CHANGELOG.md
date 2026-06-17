@@ -1,11 +1,11 @@
-# @monkeysee/bridge
+# monkeysee-bridge
 
 ## 0.1.0
 
 ### Minor Changes
 
-- d37a190: M0: content-script MVP. Adds the wire protocol (`@monkeysee/protocol`) and the MCP
-  bridge (`@monkeysee/bridge`) that exposes browser observation and actions as MCP
+- d37a190: M0: content-script MVP. Adds the wire protocol (`monkeysee-protocol`) and the MCP
+  bridge (`monkeysee-bridge`) that exposes browser observation and actions as MCP
   tools over a local WebSocket to the MonkeySee Chrome extension.
 - f7d84ed: M2: same-origin frames + visual fallback. The extension now indexes the top frame plus
   every same-origin child frame (`all_frames: true`), namespacing handle indices by frame
@@ -38,4 +38,4 @@ active, controlled }` per tab plus the current `controlledTabId`), `switch_tab(t
 - Updated dependencies [f7d84ed]
 - Updated dependencies [3ec00ad]
 - Updated dependencies [fcc2026]
-  - @monkeysee/protocol@0.1.0
+  - monkeysee-protocol@0.1.0

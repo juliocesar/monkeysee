@@ -1,5 +1,5 @@
-import type { Box, ElementHandle, PageState } from '@monkeysee/protocol'
-import { FRAME_STRIDE } from '@monkeysee/protocol'
+import type { Box, ElementHandle, PageState } from 'monkeysee-protocol'
+import { FRAME_STRIDE } from 'monkeysee-protocol'
 import { accessibleName, clearHandles, roleOf, setHandle } from './handles'
 
 const INTERACTIVE_SELECTOR = [

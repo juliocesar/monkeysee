@@ -1,5 +1,5 @@
 {
-  "name": "@monkeysee/protocol",
+  "name": "monkeysee-protocol",
   "version": "0.1.0",
   "description": "Shared wire types and zod schemas for MonkeySee — the compatibility spine between the MCP bridge and the Chrome extension.",
   "license": "MIT",

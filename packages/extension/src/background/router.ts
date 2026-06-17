@@ -1,5 +1,5 @@
-import type { PageState, RpcError, RpcMethod, RpcRequest, RpcResponse } from '@monkeysee/protocol'
-import { FRAME_STRIDE } from '@monkeysee/protocol'
+import type { PageState, RpcError, RpcMethod, RpcRequest, RpcResponse } from 'monkeysee-protocol'
+import { FRAME_STRIDE } from 'monkeysee-protocol'
 import type { ContentMethod, ContentRequest, ContentResponse } from '../shared/messages'
 import { isLoading, onceSettled } from './nav'
 import * as dbg from './debugger-backend'

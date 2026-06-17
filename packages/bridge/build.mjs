@@ -16,7 +16,7 @@ const opts = {
   packages: 'external',
   sourcemap: true,
 }
-// Bundle the built extension into the bridge so a single `@monkeysee/bridge`
+// Bundle the built extension into the bridge so a single `monkeysee-bridge`
 // install ships both the MCP server and the unpacked extension (no Chrome Web
 // Store). The extension is not a dependency of the bridge, so `pnpm -r` order
 // isn't guaranteed — build it explicitly here, then copy its dist.

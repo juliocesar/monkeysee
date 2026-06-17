@@ -1,6 +1,6 @@
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { BridgeEvent, RpcMethod, RpcRequest, RpcResponse, RpcError } from '@monkeysee/protocol'
-import { PROTOCOL_VERSION, isProtocolCompatible } from '@monkeysee/protocol'
+import type { BridgeEvent, RpcMethod, RpcRequest, RpcResponse, RpcError } from 'monkeysee-protocol'
+import { PROTOCOL_VERSION, isProtocolCompatible } from 'monkeysee-protocol'
 
 /** Error thrown when an RPC call fails; carries the structured RpcError. */
 export class RpcCallError extends Error {

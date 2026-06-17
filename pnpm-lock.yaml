@@ -47,7 +47,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@4.4.3)
-      '@monkeysee/protocol':
+      monkeysee-protocol:
         specifier: workspace:*
         version: link:../protocol
       ws:
@@ -72,7 +72,7 @@ importers:
 
   packages/extension:
     dependencies:
-      '@monkeysee/protocol':
+      monkeysee-protocol:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:

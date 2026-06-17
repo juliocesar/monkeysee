@@ -1,5 +1,5 @@
 {
-  "name": "@monkeysee/bridge",
+  "name": "monkeysee-bridge",
   "version": "0.1.0",
   "description": "MCP server that lets an MCP client (Claude Code, Codex, any MCP client) drive a real, logged-in Chrome profile. Ships the MonkeySee Chrome extension bundled.",
   "license": "MIT",
@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@monkeysee/protocol": "workspace:*",
+    "monkeysee-protocol": "workspace:*",
     "ws": "^8.18.0",
     "zod": "^4.0.0"
   },

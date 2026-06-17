@@ -1,4 +1,4 @@
-// Printed after `npm install @monkeysee/bridge`. Points the user at the bundled,
+// Printed after `npm install monkeysee-bridge`. Points the user at the bundled,
 // unpacked extension so they can load it in Chrome. Stays silent (exit 0) when the
 // build hasn't run yet — e.g. during local `pnpm install` in the monorepo, where
 // postinstall fires before `pnpm build`. Never fail an install over a message.

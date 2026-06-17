@@ -1,4 +1,4 @@
-import type { RpcError } from '@monkeysee/protocol'
+import type { RpcError } from 'monkeysee-protocol'
 
 /** RPC methods the content script handles directly (they need DOM access). */
 export type ContentMethod =

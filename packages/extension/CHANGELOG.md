@@ -40,4 +40,4 @@ active, controlled }` per tab plus the current `controlledTabId`), `switch_tab(t
 - Updated dependencies [f7d84ed]
 - Updated dependencies [3ec00ad]
 - Updated dependencies [fcc2026]
-  - @monkeysee/protocol@0.1.0
+  - monkeysee-protocol@0.1.0

@@ -6,7 +6,7 @@
  * `OffscreenCanvas`, which is available in the MV3 service worker.
  */
 
-import type { PageState } from '@monkeysee/protocol'
+import type { PageState } from 'monkeysee-protocol'
 
 /** Capture the visible viewport of `tabId`'s window as a base64 PNG (no data: prefix). */
 export async function capture(tabId: number): Promise<string> {
