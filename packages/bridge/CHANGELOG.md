@@ -1,5 +1,18 @@
 # monkeysee-bridge
 
+## 0.3.0
+
+### Minor Changes
+
+- Multi-session support: N concurrent MCP sessions can now drive one Chrome with no daemon.
+  Each bridge runs a leader/follower election on the extension port (`8787`); the leader owns
+  the extension link and relays followers' RPCs over a new control port (`8788`,
+  `MONKEYSEE_CONTROL_PORT`). Per-session tab state lives in each process, so sessions stay
+  isolated and a leader handoff (leader exits → a follower re-elects) keeps each session on
+  its own tab. The control channel reuses the existing `RpcRequest`/`RpcResponse`/`hello`
+  wire format and protocol-version handshake — no protocol bump, and the single-session path
+  is unchanged.
+
 ## 0.2.0
 
 ### Minor Changes

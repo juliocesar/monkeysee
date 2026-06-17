@@ -13,6 +13,10 @@ class RouterError extends Error {
   }
 }
 
+// Visual focus hint only: the tab the extension last brought to front (open_tab/switch_tab).
+// It is NOT the routing default — the bridge injects each session's own `tabId` per request,
+// so this global must never decide routing for a session that omits one (that would let one
+// session's tab leak into another's default action). See MULTI_SESSION_PLAN §3.7.
 let controlledTabId: number | null = null
 
 const CONTENT_METHODS = new Set<ContentMethod>([
@@ -187,21 +191,14 @@ async function resolveTab(req: RpcRequest): Promise<number> {
 }
 
 async function pickTab(req: RpcRequest): Promise<number> {
+  // The bridge injects the session's own tabId; an established session always lands here.
   if (typeof req.tabId === 'number') return req.tabId
-  if (controlledTabId !== null) {
-    // Confirm the tab still exists.
-    try {
-      await chrome.tabs.get(controlledTabId)
-      return controlledTabId
-    } catch {
-      controlledTabId = null
-    }
-  }
+  // Fallback for a session that has never opened/switched a tab: resolve the active tab
+  // fresh each time. We deliberately do NOT persist it into `controlledTabId` — that global
+  // is shared across sessions and persisting here would make one session's default action
+  // hit whatever tab another session last touched.
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
-  if (active?.id !== undefined) {
-    controlledTabId = active.id
-    return active.id
-  }
+  if (active?.id !== undefined) return active.id
   throw new RouterError({ code: 'not_found', message: 'No controlled or active tab available.' })
 }
 

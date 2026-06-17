@@ -30,6 +30,12 @@ fast, reliable set of hands and eyeballs it has always wanted.
 
 The agent decides _what_ to do. MonkeySee just does it and reports back what it saw.
 
+Run more than one terminal at once? It just works — no daemon, no setup. Each session gets
+its own bridge; the first to start owns the Chrome link (the **leader**) and the rest relay
+through it (**followers**) over a second local port (`8788`). Each session tracks its own
+tab, so an action in terminal A hits A's tab and an action in terminal B hits B's. If the
+leader's terminal closes, a surviving session takes over automatically and keeps its tab.
+
 ## What your agent can do
 
 Once it's wired up, your agent gets a toolbox:
@@ -233,8 +239,10 @@ The bridge and extension swap a `protocolVersion` in the WebSocket `hello` hands
 contract lives in `monkeysee-protocol`). If their **major** versions disagree, the bridge
 refuses the connection and never serves a tool call to a mismatched extension. The popup
 shows an "incompatible bridge" status and the extension retries slowly until you update the
-older side. Pre-1.0, both sides are major `0` and move in lockstep through the workspace, so
-this only bites across a future breaking bump.
+older side. The same handshake guards the follower→leader control channel, so a stale
+session whose protocol differs is refused rather than served across a gap. Pre-1.0, both
+sides are major `0` and move in lockstep through the workspace, so this only bites across a
+future breaking bump.
 
 ## License
 

@@ -8,6 +8,20 @@ Claude Code ──MCP(stdio)──▶ monkeysee-bridge ──ws://localhost:8787
    (brain)                   (dumb router)                            (dumb router)     (smart: eyes + hands)
 ```
 
+Multiple concurrent sessions share one Chrome via a **leader/follower** election (no
+daemon). Each MCP client launches its own bridge; whichever binds the extension port `8787`
+first is the **leader** and owns the extension link, and also binds the control port `8788`.
+The rest are **followers** that proxy their RPCs to the leader over `8788`. Each process
+holds its own session's `currentTabId` and injects it before a request leaves the process,
+so sessions stay isolated and a leader handoff (leader dies → a follower re-elects) keeps
+each session on its own tab. See `plans/MULTI_SESSION_PLAN.md`.
+
+```
+CC A ─stdio─▶ bridge A (LEADER)  ── owns ws://127.0.0.1:8787 ──▶ extension ──▶ Chrome
+                   ▲ ws://127.0.0.1:8788 (control relay)
+CC B ─stdio─▶ bridge B (FOLLOWER) ┘  proxies its RPCs to the leader
+```
+
 ## Packages
 
 ### `packages/protocol` — `monkeysee-protocol` (published to npm)
@@ -28,13 +42,17 @@ Bundled with esbuild (ESM Node); types emitted by `tsc`. **Logs only to stderr.*
 
 | File                | Purpose                                                                       |
 | ------------------- | ----------------------------------------------------------------------------- |
-| `src/index.ts`      | bin entry: start WS server + MCP stdio transport; signal handling; prints bundled `dist/extension` path to stderr |
+| `src/index.ts`      | bin entry: MCP stdio transport + leader/follower **election** (own `8787` → leader; else proxy via `8788`); re-elects on leader death; signal handling; prints bundled `dist/extension` path to stderr |
 | `build.mjs`         | esbuild the server, then build + copy the extension into `dist/extension/`     |
 | `scripts/postinstall.mjs` | after `npm install`, prints the bundled extension path + Load-unpacked steps (silent if `dist/extension` absent) |
-| `src/ws-server.ts`  | WS server; request/response correlation by id; per-call timeout; `RpcCallError`; `hello` protocol-major check (refuses incompatible extensions) |
-| `src/mcp-server.ts` | builds the `McpServer` and registers tools                                    |
-| `src/tools.ts`      | every MCP tool (name, description, zod schema, handler); `done` grounding here  |
+| `src/ws-server.ts`  | WS server; `listen()` (awaitable bind for election); request/response correlation by id; per-call timeout; `RpcCallError`; `hello` protocol-major check (refuses incompatible extensions). Is the leader's `RpcBackend`. |
+| `src/session.ts`    | per-session executor (`Session` + `RpcBackend`): injects/learns `currentTabId`, rewrites `list_tabs` per session; backend swaps on leader↔follower handoff |
+| `src/control-server.ts` | leader-only relay: binds `8788`, handshakes followers (`hello` protocol check), forwards their RPCs to the extension via `WsServer.call` |
+| `src/control-client.ts` | follower-only `RpcBackend`: frames RPCs to the leader over `8788`, correlates responses, reconstructs `RpcCallError`, triggers re-election on close |
+| `src/mcp-server.ts` | builds the `McpServer` and registers tools against a `Session`                |
+| `src/tools.ts`      | every MCP tool (name, description, zod schema, handler); calls through `Session`; `done` grounding here |
 | `test/e2e.mjs`      | browser-free end-to-end test (fake extension WS + real MCP client). `pnpm test` |
+| `test/multi-session.mjs` | browser-free multi-session test: follower round-trip, per-session tab isolation, leader handoff. `pnpm test` |
 
 ### `packages/extension` — `extension` (MV3; bundled into `monkeysee-bridge`)
 
@@ -82,10 +100,13 @@ so one npm install ships the server and the extension together.
 - **Control:** `done` (grounds the answer with URL + page snippet; handled in the bridge)
 
 Every observation/action/navigation tool also takes an optional `tabId` to target a
-specific tab without changing which tab is controlled. Omitted, it operates on the
-controlled tab (set by `open_tab`/`switch_tab`, else the active tab). The target rides on
-the `RpcRequest` envelope (`tabId`), not inside the tool params; the bridge splits it off
-and the SW router resolves it via `pickTab`/`resolveTab`.
+specific tab without changing which tab is controlled. Omitted, it operates on the session's
+controlled tab — held **per session in the bridge** (`Session.currentTabId`, set by
+`open_tab`/`switch_tab`, learned from responses), and injected onto the `RpcRequest`
+envelope before the request leaves the process. The SW router routes by that `tabId`; only a
+session that has never opened/switched a tab falls back to the active tab (`pickTab`). The
+extension's `controlledTabId` global is now just a visual-focus hint, not the routing
+default — that moved into the bridge so concurrent sessions don't clobber each other.
 
 ## Action backends
 
@@ -144,6 +165,14 @@ it disagrees.
     unpacked from a path that `postinstall` and the bridge's startup line both print. Avoids
     a second distribution channel, Web Store review latency, and a separately-versioned
     artifact — the protocol contract already keeps bridge and extension in lockstep.
+12. **Multi-session via leader/follower election in the bridge — no daemon.** The extension
+    can't do service discovery (one fixed WS URL, no filesystem), so multiplexing lives in
+    the bridge layer: `8787` is the sole election token (its holder is leader and owns the
+    extension link); the leader also binds `8788` and relays followers' RPCs. Per-session
+    tab state lives in each process (not the hub), so the control relay stays a dumb
+    forwarder and a leader handoff is automatically tab-safe. The control channel reuses the
+    `RpcRequest`/`RpcResponse`/`hello` wire format — maximum reuse, no protocol bump. See
+    `plans/MULTI_SESSION_PLAN.md`.
 
 ## Further reading
 

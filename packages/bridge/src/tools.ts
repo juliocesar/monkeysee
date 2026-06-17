@@ -26,7 +26,8 @@ import {
   ScreenshotParams,
   DoneParams,
 } from 'monkeysee-protocol'
-import { RpcCallError, type WsServer } from './ws-server'
+import { RpcCallError } from './ws-server'
+import type { Session } from './session'
 
 function textResult(data: unknown): CallToolResult {
   const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
@@ -63,14 +64,14 @@ function splitTab(args: unknown): { tabId: number | undefined; params: Record<st
 
 /** Forward tool args straight to the extension over RPC and return the JSON result. */
 async function forward(
-  ws: WsServer,
+  session: Session,
   method: RpcMethod,
   args: unknown,
   opts?: { timeoutMs?: number },
 ): Promise<CallToolResult> {
   try {
     const { tabId, params } = splitTab(args)
-    const result = await ws.call(method, params, { ...opts, tabId })
+    const result = await session.call(method, params, { ...opts, tabId })
     return textResult(result)
   } catch (e) {
     return errorResult(describeError(e))
@@ -83,7 +84,7 @@ const SPATIAL = 'Spatial/raw action (CSS px, viewport-relative)'
 const NAV = 'Navigation / lifecycle'
 const TABS = 'Tab management (multi-tab control)'
 
-export function registerTools(server: McpServer, ws: WsServer): void {
+export function registerTools(server: McpServer, session: Session): void {
   // ---- Observation ----
   server.registerTool(
     'get_state',
@@ -94,7 +95,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
     async args => {
       try {
         const { tabId, params } = splitTab(args)
-        const state = (await ws.call('get_state', params, { tabId })) as PageState & {
+        const state = (await session.call('get_state', params, { tabId })) as PageState & {
           screenshot?: string
         }
         const { screenshot, ...rest } = state
@@ -118,7 +119,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
     async args => {
       try {
         const { tabId } = splitTab(args)
-        const r = (await ws.call('screenshot', {}, { tabId })) as { imageBase64: string }
+        const r = (await session.call('screenshot', {}, { tabId })) as { imageBase64: string }
         return imageResult(r.imageBase64)
       } catch (e) {
         return errorResult(describeError(e))
@@ -132,7 +133,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${OBSERVE}: read the human-readable text of the page (or the subtree at the given element index). Use this when the task ends in reading content.`,
       inputSchema: ExtractTextParams.shape,
     },
-    async args => forward(ws, 'extract_text', args),
+    async args => forward(session, 'extract_text', args),
   )
 
   // ---- Semantic actions ----
@@ -142,7 +143,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SEMANTIC}: click the element at \`index\`.`,
       inputSchema: ClickParams.shape,
     },
-    async args => forward(ws, 'click', args),
+    async args => forward(session, 'click', args),
   )
 
   server.registerTool(
@@ -151,7 +152,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SEMANTIC}: focus the input/textarea/contenteditable at \`index\` and set its value to \`text\`.`,
       inputSchema: TypeParams.shape,
     },
-    async args => forward(ws, 'type', args),
+    async args => forward(session, 'type', args),
   )
 
   server.registerTool(
@@ -160,7 +161,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SEMANTIC}: choose \`value\` in the <select> at \`index\`.`,
       inputSchema: SelectOptionParams.shape,
     },
-    async args => forward(ws, 'select_option', args),
+    async args => forward(session, 'select_option', args),
   )
 
   server.registerTool(
@@ -169,7 +170,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SEMANTIC}: hover the element at \`index\`.`,
       inputSchema: HoverParams.shape,
     },
-    async args => forward(ws, 'hover', args),
+    async args => forward(session, 'hover', args),
   )
 
   server.registerTool(
@@ -178,7 +179,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SEMANTIC}: focus the element at \`index\`.`,
       inputSchema: FocusParams.shape,
     },
-    async args => forward(ws, 'focus', args),
+    async args => forward(session, 'focus', args),
   )
 
   // ---- Spatial / raw actions ----
@@ -188,7 +189,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: click at viewport coordinates (x, y).`,
       inputSchema: ClickAtParams.shape,
     },
-    async args => forward(ws, 'click_at', args),
+    async args => forward(session, 'click_at', args),
   )
 
   server.registerTool(
@@ -197,7 +198,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: scroll the page in a direction by an optional amount (default ~ one viewport).`,
       inputSchema: ScrollParams.shape,
     },
-    async args => forward(ws, 'scroll', args),
+    async args => forward(session, 'scroll', args),
   )
 
   server.registerTool(
@@ -206,7 +207,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: scroll the element at \`index\` into view.`,
       inputSchema: ScrollToParams.shape,
     },
-    async args => forward(ws, 'scroll_to', args),
+    async args => forward(session, 'scroll_to', args),
   )
 
   server.registerTool(
@@ -215,7 +216,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: drag from (x1, y1) to (x2, y2).`,
       inputSchema: DragParams.shape,
     },
-    async args => forward(ws, 'drag', args),
+    async args => forward(session, 'drag', args),
   )
 
   server.registerTool(
@@ -224,7 +225,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: press a key (e.g. 'Enter', 'Tab', 'Escape') on the focused element, with optional modifiers.`,
       inputSchema: PressParams.shape,
     },
-    async args => forward(ws, 'press', args),
+    async args => forward(session, 'press', args),
   )
 
   server.registerTool(
@@ -233,7 +234,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${SPATIAL}: type text into the currently focused element, character by character.`,
       inputSchema: TypeTextParams.shape,
     },
-    async args => forward(ws, 'type_text', args),
+    async args => forward(session, 'type_text', args),
   )
 
   // ---- Navigation / lifecycle ----
@@ -243,7 +244,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${NAV}: open a new tab at \`url\` and make it the controlled tab.`,
       inputSchema: OpenTabParams.shape,
     },
-    async args => forward(ws, 'open_tab', args),
+    async args => forward(session, 'open_tab', args),
   )
 
   // ---- Tab management (multi-tab control) ----
@@ -255,7 +256,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${TABS}: list all open tabs as { tabId, url, title, active, controlled }, plus the current controlledTabId. Use this to discover tabs to switch to or target via a tool's optional \`tabId\`.`,
       inputSchema: ListTabsParams.shape,
     },
-    async () => forward(ws, 'list_tabs', {}),
+    async () => forward(session, 'list_tabs', {}),
   )
 
   server.registerTool(
@@ -264,7 +265,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${TABS}: make \`tabId\` the controlled tab (where default-target actions go) and bring it to the front.`,
       inputSchema: SwitchTabParams.shape,
     },
-    async args => forward(ws, 'switch_tab', args),
+    async args => forward(session, 'switch_tab', args),
   )
 
   server.registerTool(
@@ -273,7 +274,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${TABS}: close the tab with \`tabId\`. If it was the controlled tab, control falls back to the active tab on the next action.`,
       inputSchema: CloseTabParams.shape,
     },
-    async args => forward(ws, 'close_tab', args),
+    async args => forward(session, 'close_tab', args),
   )
 
   server.registerTool(
@@ -282,7 +283,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${NAV}: navigate the controlled tab to \`url\`.`,
       inputSchema: NavigateParams.shape,
     },
-    async args => forward(ws, 'navigate', args),
+    async args => forward(session, 'navigate', args),
   )
 
   server.registerTool(
@@ -291,7 +292,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${NAV}: navigate the controlled tab back in history.`,
       inputSchema: GoBackParams.shape,
     },
-    async args => forward(ws, 'go_back', args),
+    async args => forward(session, 'go_back', args),
   )
 
   server.registerTool(
@@ -300,7 +301,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       description: `${NAV}: navigate the controlled tab forward in history.`,
       inputSchema: GoForwardParams.shape,
     },
-    async args => forward(ws, 'go_forward', args),
+    async args => forward(session, 'go_forward', args),
   )
 
   server.registerTool(
@@ -312,7 +313,7 @@ export function registerTools(server: McpServer, ws: WsServer): void {
     async args => {
       const timeoutMs = args.timeoutMs ?? 10_000
       // Give the RPC a little headroom past its own internal timeout.
-      return forward(ws, 'wait_for_load', args, { timeoutMs: timeoutMs + 5_000 })
+      return forward(session, 'wait_for_load', args, { timeoutMs: timeoutMs + 5_000 })
     },
   )
 
@@ -328,13 +329,13 @@ export function registerTools(server: McpServer, ws: WsServer): void {
       let url = ''
       let snippet = ''
       try {
-        const state = (await ws.call('get_state', { limit: 1 })) as PageState
+        const state = (await session.call('get_state', { limit: 1 })) as PageState
         url = state.url
       } catch {
         // best-effort grounding
       }
       try {
-        const text = (await ws.call('extract_text', {})) as { text?: string }
+        const text = (await session.call('extract_text', {})) as { text?: string }
         snippet = (text.text ?? '').trim().slice(0, 500)
       } catch {
         // best-effort grounding

@@ -13,7 +13,8 @@ import { dirname, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BRIDGE = resolve(__dirname, '../dist/index.js')
-const PORT = '8799' // dedicated test port
+const PORT = '8799' // dedicated test extension port
+const CONTROL_PORT = '8798' // dedicated test control port (never collide with a real bridge)
 
 // A 1x1 transparent PNG; stands in for a captured viewport in the browser-free harness.
 const TINY_PNG =
@@ -146,7 +147,7 @@ async function main() {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [BRIDGE],
-    env: { ...process.env, MONKEYSEE_WS_PORT: PORT },
+    env: { ...process.env, MONKEYSEE_WS_PORT: PORT, MONKEYSEE_CONTROL_PORT: CONTROL_PORT },
     stderr: 'inherit',
   })
   const client = new Client({ name: 'e2e-test', version: '0.0.0' })

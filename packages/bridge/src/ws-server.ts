@@ -24,17 +24,40 @@ const DEFAULT_TIMEOUT_MS = 30_000
  * Deliberately dumb: no DOM knowledge, just request/response plumbing.
  */
 export class WsServer {
-  private readonly wss: WebSocketServer
+  private wss: WebSocketServer | null = null
   private socket: WebSocket | null = null
   private readonly pending = new Map<string, Pending>()
   private counter = 0
   private extensionVersion: string | null = null
 
-  constructor(port: number, host = '127.0.0.1') {
-    this.wss = new WebSocketServer({ host, port })
-    this.wss.on('connection', ws => this.onConnection(ws))
-    this.wss.on('listening', () => console.error(`[monkeysee] ws listening on ${host}:${port}`))
-    this.wss.on('error', err => console.error('[monkeysee] ws server error', err))
+  constructor(
+    private readonly port: number,
+    private readonly host = '127.0.0.1',
+  ) {}
+
+  /**
+   * Bind the extension port. Resolves once the server is listening, rejects on `error`
+   * (notably `EADDRINUSE`) so the caller can run leader election. Mirrors the helper in
+   * `doctor.ts`. Must be called exactly once before `call()`.
+   */
+  listen(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const wss = new WebSocketServer({ host: this.host, port: this.port })
+      const onError = (err: Error) => {
+        wss.off('listening', onListening)
+        reject(err)
+      }
+      const onListening = () => {
+        wss.off('error', onError)
+        this.wss = wss
+        wss.on('connection', ws => this.onConnection(ws))
+        wss.on('error', err => console.error('[monkeysee] ws server error', err))
+        console.error(`[monkeysee] ws listening on ${this.host}:${this.port}`)
+        resolve()
+      }
+      wss.once('error', onError)
+      wss.once('listening', onListening)
+    })
   }
 
   get connected(): boolean {
@@ -184,6 +207,7 @@ export class WsServer {
 
   close(): void {
     this.failAllPending({ code: 'internal', message: 'bridge shutting down' })
-    this.wss.close()
+    this.wss?.close()
+    this.wss = null
   }
 }
