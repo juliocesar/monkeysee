@@ -74,9 +74,11 @@ Chrome:
    git-ignored, so it stays local). That entry launches the bridge over stdio. Within a few
    seconds the extension's service worker connects to the bridge. Look for the green dot in
    the extension popup.
-4. **Give it a job.** Try: _"find me a Wikipedia article about Wales."_ It should `open_tab`,
-   `get_state`, `type` into search, `press('Enter')` or `click`, re-read, `extract_text`,
-   and `done` with the URL and a snippet.
+4. **Give it a job.** Be explicit that it should use the browser, otherwise a capable agent
+   will just answer from memory or its own web search and never touch MonkeySee. Try:
+   _"Using the monkeysee browser tools, find me a Wikipedia article about Wales."_ It should
+   `open_tab`, `get_state`, `type` into search, `press('Enter')` or `click`, re-read,
+   `extract_text`, and `done` with the URL and a snippet.
 
 > **`ws://localhost:8787` connection refused?** Totally normal when nothing is running. The
 > bridge only listens while an MCP client has launched it. Start Claude Code here (the
