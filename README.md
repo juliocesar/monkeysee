@@ -66,7 +66,8 @@ The bridge is fully verifiable from the CLI (`pnpm test`). The full loop needs C
    "Load unpacked", select `packages/extension/dist`. (When you install the published
    `@monkeysee/bridge`, the extension ships inside it — `npm install` and the bridge's
    startup line both print the path to load instead.)
-3. **Start Claude Code** in this directory. The `.mcp.json` here launches the bridge
+3. **Start Claude Code** in this directory. Copy `.mcp.json.example` to `.mcp.json`
+   first (it is git-ignored, so it stays local); that entry launches the bridge
    automatically (MCP over stdio). The extension's service worker connects to the
    bridge's WebSocket server within a few seconds — confirm the green dot in the
    extension popup.

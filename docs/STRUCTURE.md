@@ -104,7 +104,7 @@ Mutating actions run through one of two backends, selectable in the popup
 | `pnpm-workspace.yaml` | workspace packages glob                                  |
 | `tsconfig.base.json`  | strict shared TS config (esbuild bundles; tsc typechecks) |
 | `eslint.config.js`    | flat config (ESLint 9 + only-warn + prettier)            |
-| `.mcp.json`           | Claude Code MCP entry that launches the bridge           |
+| `.mcp.json.example`   | template Claude Code MCP entry; copy to `.mcp.json` (git-ignored, local) |
 | `.changeset/`         | pending release notes for the published packages         |
 
 ## Design decisions

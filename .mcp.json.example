@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "monkeysee": {
+      "command": "node",
+      "args": ["packages/bridge/dist/index.js"],
+      "env": { "MONKEYSEE_WS_PORT": "8787" }
+    }
+  }
+}

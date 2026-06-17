@@ -4,3 +4,4 @@ dist/
 *.log
 packages/extension/monkeysee-extension.zip
 .DS_Store
+.mcp.json
