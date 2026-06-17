@@ -1,6 +1,27 @@
 {
   "name": "@monkeysee/protocol",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Shared wire types and zod schemas for MonkeySee — the compatibility spine between the MCP bridge and the Chrome extension.",
+  "license": "MIT",
+  "author": "Julio Cesar Ody <julio@supernormal.com>",
+  "homepage": "https://github.com/juliocesar/monkeysee#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juliocesar/monkeysee.git",
+    "directory": "packages/protocol"
+  },
+  "bugs": "https://github.com/juliocesar/monkeysee/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "browser-automation",
+    "chrome-extension",
+    "zod",
+    "monkeysee"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "dist/index.js",
