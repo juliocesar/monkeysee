@@ -8,8 +8,8 @@ We do **not** build an agent loop. Claude Code / Codex already have one. This pr
 exposes browser observation and actions as **MCP tools**. The terminal agent is the
 brain; this is the hands and eyes.
 
-Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map) and [`BUILD.md`](./docs/BUILD.md)
-(build/packaging gotchas).
+Docs live in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map +
+design decisions) and [`BUILD.md`](./docs/BUILD.md) (build/packaging gotchas).
 
 ## Packages
 

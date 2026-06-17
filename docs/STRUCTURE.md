@@ -107,6 +107,44 @@ Mutating actions run through one of two backends, selectable in the popup
 | `.mcp.json`           | Claude Code MCP entry that launches the bridge           |
 | `.changeset/`         | pending release notes for the published packages         |
 
+## Design decisions
+
+Settled rationale — the "why" behind the shape above. The code is the source of truth where
+it disagrees.
+
+1. **MCP, not a custom loop.** We expose tools only; the CLI agent reasons and decides
+   "done". No LLM/AI-SDK code lives here.
+2. **Monorepo (pnpm workspace + Changesets, no Turborepo).** Justified by publishing
+   `@monkeysee/protocol` + `@monkeysee/bridge` to npm that, together with the bundled
+   extension, must share a wire protocol in lockstep. Kept light on purpose.
+3. **Page representation: indexed element list with bounding boxes** (`PageState`) — not
+   full HTML, not screenshots by default. One payload serves semantic actions
+   (`click(index)`), spatial actions (`click_at(x,y)`), set-of-marks, and frame merging.
+4. **Coordinates: CSS pixels, viewport-relative** — what `getBoundingClientRect()` returns
+   and `elementFromPoint()` consumes. `scrollX/Y` + `dpr` ride in `PageState` for
+   page-relative and device-pixel (screenshot) conversions.
+5. **Capability ramp: content-script first, `chrome.debugger` later.** Action verbs are
+   defined abstractly so swapping the backend is invisible to the agent (see Action backends
+   above).
+6. **Frame-proofing baked in.** Handles are namespaced `frameId * FRAME_STRIDE + localId`;
+   state is assembled by an aggregator; the content script is frame-agnostic (reports its
+   own `frameId`). M2 flipped `all_frames: true` without a rewrite.
+7. **Spatial/raw verbs are first-class** (`click_at`, `scroll`, `drag`, `press`,
+   `type_text`), not just semantic ones — which is why boxes live in `PageState`.
+8. **Toolchain: Node 24, pnpm 10, TypeScript 6, zod 4, esbuild.** ESLint stays on **9** on
+   purpose: `eslint-plugin-only-warn` (unmaintained, patches eslint internals) is unverified
+   on ESLint 10. Dropping `only-warn` is the path to ESLint 10 later (it's a convenience,
+   not load-bearing).
+9. **Bundler: esbuild everywhere.** Content script = **IIFE** (content scripts can't be ES
+   modules), service worker = **ESM**, bridge = **ESM Node**. No Vite/WXT/@crxjs.
+10. **Safety from M0 (minimal).** Domain allowlist + a confirmation-gate concept for
+    destructive actions; the agent drives a logged-in browser, so treat it as such.
+11. **Ship the extension unpacked, bundled in `@monkeysee/bridge` — no Chrome Web Store.**
+    One `npm install` delivers the server and the extension's `dist/` together; users Load
+    unpacked from a path that `postinstall` and the bridge's startup line both print. Avoids
+    a second distribution channel, Web Store review latency, and a separately-versioned
+    artifact — the protocol contract already keeps bridge and extension in lockstep.
+
 ## Further reading
 
 - [`BUILD.md`](./BUILD.md) — build & packaging gotchas (declaration emit, pnpm phantom
