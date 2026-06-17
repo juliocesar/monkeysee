@@ -10,6 +10,8 @@ The key word is **your** Chrome. Not a fresh headless sandbox that gets logged o
 everything. The actual browser where you are already signed into your email, your dashboard,
 your everything.
 
+<video src="https://github.com/juliocesar/monkeysee/raw/main/docs/demo.mp4" controls muted playsinline width="640"></video>
+
 ## This is not an agent
 
 Let's be clear about who does the thinking. MonkeySee has **no agent loop, no LLM, no
@@ -37,6 +39,32 @@ Once it's wired up, your agent gets a toolbox:
 - **Get around:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
 - **Juggle tabs:** `list_tabs`, `switch_tab`, `close_tab`
 - **Call it:** `done` (grounds the answer with the final URL + a page snippet)
+
+## What you can do with it
+
+The point of driving _your_ logged-in Chrome is that the agent can act on the context it
+already has in your terminal session and the sites you're already signed into. A few
+workflows that fall out of that:
+
+- **Fill forms with context the agent already has.** Point Claude Code or Codex at a signup,
+  job application, expense report, or vendor onboarding form and let it populate the fields
+  from a file, a prior conversation, or your repo. It reads the form as an indexed element
+  list, types into each field, and tells you what it entered before submitting.
+- **Pull data out of dashboards that have no API.** Analytics, billing, internal admin
+  panels you're logged into. The agent navigates, `extract_text`s, and hands back structured
+  notes, no scraping credentials or headless re-login required.
+- **Reproduce and triage a bug from a report.** Hand it the repro steps; it clicks through
+  your staging app, screenshots each state, and reports where the flow actually breaks.
+- **File the boring tickets.** Open Jira/Linear/GitHub, create issues from a list in your
+  conversation, and link them back, all in the tab where you're already authenticated.
+- **Cross-check work against a live site.** Diff what your code _should_ render against what
+  the deployed page actually shows, with set-of-marks screenshots to point at the mismatch.
+- **Drive multi-step web flows you'd rather not script.** Cookie banners, paginated tables,
+  multi-page wizards: the agent re-reads the page after each step instead of relying on a
+  brittle recorded selector.
+
+In all of these the agent is the brain and MonkeySee is the hands. You stay in the loop,
+the allowlist gates anything mutating, and every action reports back what it saw.
 
 ## Install
 
