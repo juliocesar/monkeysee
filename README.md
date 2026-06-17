@@ -10,6 +10,8 @@ The key word is **your** Chrome. Not a fresh headless sandbox that gets logged o
 everything. The actual browser where you are already signed into your email, your dashboard,
 your everything.
 
+## Demo
+
 <video src="https://github.com/juliocesar/monkeysee/raw/main/docs/demo.mp4" controls muted playsinline width="640"></video>
 
 ## This is not an agent
@@ -134,7 +136,7 @@ Three packages in a pnpm workspace:
 | `extension`           | MV3 Chrome extension: service-worker router + content-script eyes/hands. Bundled into the bridge, loaded unpacked. |
 
 The deep dive lives in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map
-+ design decisions) and [`BUILD.md`](./docs/BUILD.md) (build/packaging gotchas).
++ design decisions).
 
 ## Did it actually work? (M0 acceptance)
 
