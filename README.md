@@ -138,17 +138,6 @@ Three packages in a pnpm workspace:
 The deep dive lives in [`docs/`](./docs): [`STRUCTURE.md`](./docs/STRUCTURE.md) (project map
 + design decisions).
 
-## Did it actually work? (M0 acceptance)
-
-1. The agent ends on `https://en.wikipedia.org/wiki/Wales` and `done` returns a snippet
-   mentioning Wales.
-2. `get_state` on a busy page returns at most `limit` visible elements, each with a sensible
-   `role` + `name` and a non-degenerate `box`.
-3. A stale `click(index)` after navigation returns `stale_handle` (not a wrong click), and
-   the agent recovers by re-reading with `get_state`.
-4. Kill and restart the bridge: the extension reconnects within a few seconds, no reload
-   needed.
-
 ## Safety (minimal, but real)
 
 You are pointing a robot at a browser that's logged into your life. Treat it that way.
