@@ -1,5 +1,26 @@
 # monkeysee-protocol
 
+## 0.2.0
+
+### Minor Changes
+
+- Add form discovery: `get_forms` and `fill_fields`.
+
+  `get_forms` is a form-scoped sibling of `get_state` — it returns only the page's controls,
+  grouped by `<form>` (plus orphans), each with the signal a form-filler needs (kind, type,
+  label, name, autocomplete, current value, checked state, select/radio options, and
+  required/disabled/readonly flags) and `interaction`/`requiresTrustedInput` hints. Geometry is
+  omitted unless `includeBoxes:true`. It covers native controls, ARIA-role widgets, and open
+  shadow DOM; radio groups collapse to one field whose options carry clickable indices. On a
+  form buried in a noisy page it is ~95% smaller than `get_state`. It is read-only and ungated,
+  and its indices drive the existing `type`/`click`/`select_option`/`focus` tools.
+
+  `fill_fields` batches many field writes into a single MCP call; `checked` is idempotent.
+
+  Protocol additions: `FormsState`/`FormField`/`FormGroup`/`FormOption` types, the
+  `FORM_INDEX_BASE` index-partition constant, the `get_forms` RPC method, and the
+  `GetFormsParams`/`FillFieldsParams` schemas.
+
 ## 0.1.0
 
 ### Minor Changes

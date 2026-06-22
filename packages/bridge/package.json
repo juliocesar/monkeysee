@@ -1,6 +1,6 @@
 {
   "name": "monkeysee-bridge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server that lets an MCP client (Claude Code, Codex, any MCP client) drive a real, logged-in Chrome profile. Ships the MonkeySee Chrome extension bundled.",
   "license": "MIT",
   "author": "Julio Cesar Ody <julio@supernormal.com>",
