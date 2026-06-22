@@ -15,6 +15,36 @@ export const GetStateParams = z.object({
   limit: z.number().int().positive().optional(),
 })
 
+export const GetFormsParams = z.object({
+  ...tabTarget,
+  /** If true, include hidden fields (display:none etc.). Default false. */
+  includeHidden: z.boolean().optional(),
+  /** If true, serialize box/inViewport geometry. Default false (omitted to save tokens). */
+  includeBoxes: z.boolean().optional(),
+  /** Cap on total returned fields (token control). Default 150. */
+  limit: z.number().int().positive().optional(),
+})
+
+export const FillFieldsParams = z.object({
+  ...tabTarget,
+  fields: z
+    .array(
+      z.object({
+        index: z.number().int(),
+        /** Text to type into a value field (input/textarea/contenteditable). */
+        value: z.string().optional(),
+        /**
+         * Set a checkbox/radio: the bridge clicks the field only when its current `checked`
+         * state differs from this value, so it is idempotent (re-running a fill is safe).
+         */
+        checked: z.boolean().optional(),
+        /** Option value to choose in a <select>. */
+        option: z.string().optional(),
+      }),
+    )
+    .min(1),
+})
+
 export const ClickParams = z.object({ ...tabTarget, index: z.number().int() })
 export const TypeParams = z.object({ ...tabTarget, index: z.number().int(), text: z.string() })
 export const SelectOptionParams = z.object({

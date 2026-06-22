@@ -77,7 +77,8 @@ so one npm install ships the server and the extension together.
 | File                       | Purpose                                                                    |
 | -------------------------- | -------------------------------------------------------------------------- |
 | `src/content/index.ts`     | message dispatcher; `wait_quiet` (MutationObserver); `locate` (coords for CDP) |
-| `src/content/indexer.ts`   | build `PageState`: candidate collection, visibility filter, role/name, ranking, `limit`; `frameOffset` (top-viewport coords for iframes) |
+| `src/content/indexer.ts`   | build `PageState`: candidate collection, visibility filter, role/name, ranking, `limit`; `frameOffset` (top-viewport coords for iframes); exports `isVisible`/`visibleBox`/`intersectsViewport`/`viewportDistance` shared with form discovery |
+| `src/content/forms.ts`     | build `FormsState` for `get_forms`: shadow-aware control walk (native + ARIA widgets), `<form>` grouping + orphans, radio-group collapse, form-partitioned actionable indices |
 | `src/content/handles.ts`   | index → Element registry; stale re-resolution; `cssPath` / `accessibleName` / `roleOf` |
 | `src/content/actions.ts`   | synthetic-event backend: click/type/scroll/press/etc. (M0 fallback)         |
 
@@ -92,8 +93,8 @@ so one npm install ships the server and the extension together.
 
 ## MCP tool surface (what the agent sees)
 
-- **Observation:** `get_state` (`withScreenshot` adds set-of-marks), `extract_text`, `screenshot`
-- **Semantic actions** (by `index`): `click`, `type`, `select_option`, `hover`, `focus`
+- **Observation:** `get_state` (`withScreenshot` adds set-of-marks), `get_forms` (form-scoped sibling: grouped fields with form-fill signal, far cheaper than `get_state` for filling tasks), `extract_text`, `screenshot`
+- **Semantic actions** (by `index`): `click`, `type`, `select_option`, `fill_fields` (batch fill many fields in one call), `hover`, `focus`
 - **Spatial/raw:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
 - **Navigation:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
 - **Tabs:** `list_tabs` (id, url, title, active, controlled), `switch_tab(tabId)`, `close_tab(tabId)`
@@ -173,6 +174,21 @@ it disagrees.
     forwarder and a leader handoff is automatically tab-safe. The control channel reuses the
     `RpcRequest`/`RpcResponse`/`hello` wire format — maximum reuse, no protocol bump. See
     `plans/MULTI_SESSION_PLAN.md`.
+13. **Form discovery (`get_forms`) is a form-scoped sibling of `get_state`, not a new action
+    surface.** For form-filling, a whole-page `get_state` is mostly noise and lacks the
+    signal a filler needs. `get_forms` (`content/forms.ts`) returns only controls — grouped
+    by `<form>` (+ `orphans`) with `kind`/`type`/`autocomplete`/`checked`/select+radio
+    `options`/`required`/`disabled` and `interaction`/`requiresTrustedInput` hints, geometry
+    omitted unless `includeBoxes`. The win scales with surrounding page noise (~95% smaller
+    than `get_state` on a form buried in app chrome; ~parity on a form-dense page). Two
+    deliberate choices keep it cheap and safe: it **reuses the handle registry** (each field
+    is `setHandle`'d, so existing `type`/`click`/`select_option`/`focus` drive it with no new
+    code), and it numbers indices in a **disjoint per-frame partition** (`FORM_INDEX_BASE` in
+    `protocol/state.ts`) so a form index can never alias a `get_state` index. It is read-only
+    and **ungated** — all mutation still flows through the gated action verbs. `fill_fields`
+    (bridge-side, `tools.ts`) batches N writes into one MCP call over those verbs; `checked`
+    is idempotent (it reads current state first). Cross-origin frames it can't read are
+    flagged via `FormsState.skippedFrames`.
 
 ## Further reading
 

@@ -1,8 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { PageState, RpcMethod } from 'monkeysee-protocol'
+import type { FormsState } from 'monkeysee-protocol'
 import {
   GetStateParams,
+  GetFormsParams,
+  FillFieldsParams,
   ClickParams,
   TypeParams,
   SelectOptionParams,
@@ -78,6 +81,24 @@ async function forward(
   }
 }
 
+/**
+ * Map every actionable index in a FormsState to its current `checked` state — both the
+ * fields themselves (checkbox / switch / custom) and each radio-group option (which carries
+ * its own clickable index). Used by `fill_fields` to make `checked` idempotent.
+ */
+function currentCheckedByIndex(forms: FormsState): Map<number, boolean> {
+  const map = new Map<number, boolean>()
+  const visit = (f: FormsState['forms'][number]['fields'][number]): void => {
+    if (typeof f.checked === 'boolean') map.set(f.index, f.checked)
+    for (const o of f.options ?? []) {
+      if (typeof o.index === 'number') map.set(o.index, o.selected)
+    }
+  }
+  for (const group of forms.forms) for (const f of group.fields) visit(f)
+  for (const f of forms.orphans) visit(f)
+  return map
+}
+
 const OBSERVE = 'Observation'
 const SEMANTIC = 'Semantic action (operates on an index from get_state)'
 const SPATIAL = 'Spatial/raw action (CSS px, viewport-relative)'
@@ -128,6 +149,15 @@ export function registerTools(server: McpServer, session: Session): void {
   )
 
   server.registerTool(
+    'get_forms',
+    {
+      description: `${OBSERVE}: read only the page's forms as a compact, grouped list of fields — kind, type, label, name, autocomplete, current value, checked state, select/radio options, and required/disabled flags. Covers native controls plus ARIA-role widgets and open shadow DOM. Each field's \`index\` is directly usable with type/click/select_option/focus; honor its \`interaction\`/\`requiresTrustedInput\` hints. Use this instead of get_state when the task is filling or reading a form — it is far cheaper and carries form-specific signal get_state omits.`,
+      inputSchema: GetFormsParams.shape,
+    },
+    async args => forward(session, 'get_forms', args),
+  )
+
+  server.registerTool(
     'extract_text',
     {
       description: `${OBSERVE}: read the human-readable text of the page (or the subtree at the given element index). Use this when the task ends in reading content.`,
@@ -162,6 +192,57 @@ export function registerTools(server: McpServer, session: Session): void {
       inputSchema: SelectOptionParams.shape,
     },
     async args => forward(session, 'select_option', args),
+  )
+
+  server.registerTool(
+    'fill_fields',
+    {
+      description: `${SEMANTIC}: fill multiple form fields in one call (the batch counterpart to get_forms). Pass an array of { index, value? | option? | checked? } using indices from get_forms: \`value\` types into a text/contenteditable field, \`option\` selects a <select> value, \`checked\` sets a checkbox/radio (idempotent — clicked only if its current state differs). Fields are applied in order; the result is a per-field { index, ok, error? } array, so one failed field does not abort the rest.`,
+      inputSchema: FillFieldsParams.shape,
+    },
+    async args => {
+      const { tabId, params } = splitTab(args)
+      const fields = params.fields as Array<{
+        index: number
+        value?: string
+        checked?: boolean
+        option?: string
+      }>
+
+      // For idempotent `checked`, learn current checked state once up front so we only
+      // click controls that actually need toggling (re-running a fill stays a no-op).
+      let checkedNow: Map<number, boolean> | null = null
+      if (fields.some(f => typeof f.checked === 'boolean')) {
+        try {
+          const forms = (await session.call('get_forms', {}, { tabId })) as FormsState
+          checkedNow = currentCheckedByIndex(forms)
+        } catch {
+          // best-effort: without it, a `checked` field falls back to an unconditional click
+        }
+      }
+
+      const results: Array<{ index: number; ok: boolean; error?: string }> = []
+      for (const f of fields) {
+        try {
+          if (typeof f.option === 'string') {
+            await session.call('select_option', { index: f.index, value: f.option }, { tabId })
+          } else if (typeof f.checked === 'boolean') {
+            const isOn = checkedNow?.get(f.index)
+            if (isOn === undefined || isOn !== f.checked) {
+              await session.call('click', { index: f.index }, { tabId })
+            }
+          } else if (typeof f.value === 'string') {
+            await session.call('type', { index: f.index, text: f.value }, { tabId })
+          } else {
+            throw new Error('field has none of value/option/checked')
+          }
+          results.push({ index: f.index, ok: true })
+        } catch (e) {
+          results.push({ index: f.index, ok: false, error: describeError(e) })
+        }
+      }
+      return textResult({ results })
+    },
   )
 
   server.registerTool(

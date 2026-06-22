@@ -60,6 +60,43 @@ function startFakeExtension() {
   ws.on('open', () => {
     ws.send(JSON.stringify({ type: 'hello', extensionVersion: '0.0.1', protocolVersion: '0.0.1' }))
   })
+  const fakeForms = {
+    tabId: 7,
+    url: 'https://example.com/signup',
+    title: 'Sign up',
+    forms: [
+      {
+        name: 'signup',
+        action: '/signup',
+        method: 'post',
+        fields: [
+          {
+            index: 50000,
+            frameId: 0,
+            kind: 'text',
+            type: 'email',
+            label: 'Email',
+            name: 'email',
+            autocomplete: 'email',
+            value: '',
+            required: true,
+            interaction: 'value',
+          },
+          {
+            index: 50001,
+            frameId: 0,
+            kind: 'checkbox',
+            label: 'Subscribe',
+            name: 'subscribe',
+            checked: false,
+            interaction: 'click',
+          },
+        ],
+      },
+    ],
+    orphans: [],
+    loading: false,
+  }
   ws.on('message', raw => {
     let req
     try {
@@ -70,6 +107,9 @@ function startFakeExtension() {
     if (!req.id) return
     let res
     switch (req.method) {
+      case 'get_forms':
+        res = { id: req.id, ok: true, result: { ...fakeForms, tabId: req.tabId ?? 7 } }
+        break
       case 'get_state': {
         // Mirror the extension: withScreenshot rides a base64 PNG along on the PageState.
         const withShot = req.params && req.params.withScreenshot
@@ -91,12 +131,16 @@ function startFakeExtension() {
         }
         break
       case 'click':
-        // Simulate a stale handle to exercise error mapping.
-        res = {
-          id: req.id,
-          ok: false,
-          error: { code: 'stale_handle', message: 'Element 1 is gone.' },
-        }
+        // Index 1 simulates a stale handle (exercises error mapping); other indices (e.g. a
+        // fill_fields checkbox click in the form partition) succeed.
+        res =
+          req.params && req.params.index === 1
+            ? {
+                id: req.id,
+                ok: false,
+                error: { code: 'stale_handle', message: 'Element 1 is gone.' },
+              }
+            : { id: req.id, ok: true, result: { ok: true } }
         break
       case 'open_tab':
         res = { id: req.id, ok: true, result: { tabId: 7 } }
@@ -210,6 +254,8 @@ async function main() {
     'all expected tools are registered',
     [
       'get_state',
+      'get_forms',
+      'fill_fields',
       'extract_text',
       'click',
       'type',
@@ -229,6 +275,34 @@ async function main() {
   check('get_state succeeds', !state.isError)
   check('get_state returns the page url', textOf(state).includes('en.wikipedia.org/wiki/Wales'))
   check('get_state returns indexed elements', textOf(state).includes('"role": "searchbox"'))
+
+  // 3b) get_forms round-trips the FormsState (form-scoped sibling of get_state)
+  const forms = await client.callTool({ name: 'get_forms', arguments: {} })
+  check('get_forms succeeds', !forms.isError)
+  check('get_forms returns grouped fields', textOf(forms).includes('"name": "signup"'))
+  check('get_forms carries form-specific signal', textOf(forms).includes('"autocomplete": "email"'))
+  check(
+    'get_forms field indices live in the form partition',
+    textOf(forms).includes('"index": 50000'),
+  )
+
+  // 3c) fill_fields batches writes in one call and returns a per-field result array.
+  // The checkbox starts unchecked (get_forms), so checked:true must produce a click.
+  const filled = await client.callTool({
+    name: 'fill_fields',
+    arguments: {
+      fields: [
+        { index: 50000, value: 'a@b.com' },
+        { index: 50001, checked: true },
+      ],
+    },
+  })
+  check('fill_fields succeeds', !filled.isError)
+  check('fill_fields reports a per-field result', /"results"/.test(textOf(filled)))
+  check(
+    'fill_fields applied both fields ok',
+    (textOf(filled).match(/"ok": true/g) ?? []).length === 2,
+  )
 
   // 4) stale_handle maps to an actionable error
   const click = await client.callTool({ name: 'click', arguments: { index: 1 } })

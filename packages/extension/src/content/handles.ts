@@ -102,6 +102,17 @@ export function accessibleName(el: Element): string {
     if (placeholder && placeholder.trim()) return placeholder.trim()
   }
 
+  // A `<label for=id>` can target non-labelable elements too — a contenteditable div or a
+  // custom ARIA widget — which `el.labels` (labelable form controls only) does not cover.
+  // Scope the lookup to the element's own tree (getRootNode) so it works inside shadow DOM.
+  const id = el.getAttribute('id')
+  if (id) {
+    const root = el.getRootNode() as Document | ShadowRoot
+    const label = root.querySelector(`label[for="${CSS.escape(id)}"]`)
+    const text = label?.textContent?.replace(/\s+/g, ' ').trim()
+    if (text) return text
+  }
+
   const alt = el.getAttribute('alt')
   if (alt && alt.trim()) return alt.trim()
 

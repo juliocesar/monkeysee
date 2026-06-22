@@ -1,4 +1,11 @@
-import type { PageState, RpcError, RpcMethod, RpcRequest, RpcResponse } from 'monkeysee-protocol'
+import type {
+  FormsState,
+  PageState,
+  RpcError,
+  RpcMethod,
+  RpcRequest,
+  RpcResponse,
+} from 'monkeysee-protocol'
 import { FRAME_STRIDE } from 'monkeysee-protocol'
 import type { ContentMethod, ContentRequest, ContentResponse } from '../shared/messages'
 import { isLoading, onceSettled } from './nav'
@@ -6,6 +13,7 @@ import * as dbg from './debugger-backend'
 import * as shot from './screenshot'
 
 const DEFAULT_STATE_LIMIT = 200
+const DEFAULT_FORMS_LIMIT = 150
 
 class RouterError extends Error {
   constructor(public readonly rpc: RpcError) {
@@ -21,6 +29,7 @@ let controlledTabId: number | null = null
 
 const CONTENT_METHODS = new Set<ContentMethod>([
   'get_state',
+  'get_forms',
   'extract_text',
   'click',
   'type',
@@ -249,6 +258,23 @@ async function forwardToContent(
     if (params.withScreenshot) state.screenshot = await shot.captureWithMarks(tabId, state)
     return state
   }
+  if (method === 'get_forms') {
+    const loading = isLoading(tabId)
+    const limit = (params.limit as number | undefined) ?? DEFAULT_FORMS_LIMIT
+    const allFrames = await getAllFramesSafe(tabId)
+    const frameIds = sameOriginFrameIds(allFrames)
+    const partials = (
+      await Promise.all(
+        frameIds.map(frameId =>
+          sendToContent(tabId, 'get_forms', { ...params, loading }, frameId).catch(() => null),
+        ),
+      )
+    ).filter((p): p is FormsState => p !== null)
+    // Cross-origin frames can't be read; surface the gap so the agent knows the list may
+    // be incomplete (skippedFrames > 0) rather than assuming it saw every field.
+    const skipped = Math.max(0, nonErrorFrameCount(allFrames) - frameIds.length)
+    return aggregateForms(partials, tabId, loading, limit, skipped)
+  }
   // Index-based actions route to the element's own frame; spatial actions stay on the top.
   return sendToContent(tabId, method, params, frameOf(params))
 }
@@ -258,13 +284,21 @@ async function forwardToContent(
  * are skipped (deferred past M2) — their geometry can't be placed in the top viewport.
  */
 async function sameOriginFrames(tabId: number): Promise<number[]> {
-  let frames: chrome.webNavigation.GetAllFrameResultDetails[] | null = null
+  return sameOriginFrameIds(await getAllFramesSafe(tabId))
+}
+
+async function getAllFramesSafe(
+  tabId: number,
+): Promise<chrome.webNavigation.GetAllFrameResultDetails[]> {
   try {
-    frames = await chrome.webNavigation.getAllFrames({ tabId })
+    return (await chrome.webNavigation.getAllFrames({ tabId })) ?? []
   } catch {
-    frames = null
+    return []
   }
-  if (!frames || frames.length === 0) return [0]
+}
+
+function sameOriginFrameIds(frames: chrome.webNavigation.GetAllFrameResultDetails[]): number[] {
+  if (frames.length === 0) return [0]
   const top = frames.find(f => f.frameId === 0)
   const topOrigin = originOf(top?.url)
   return frames
@@ -272,6 +306,11 @@ async function sameOriginFrames(tabId: number): Promise<number[]> {
     .filter(f => f.frameId === 0 || sameOrigin(f.url, topOrigin))
     .map(f => f.frameId)
     .sort((a, b) => a - b)
+}
+
+/** Count of readable (non-errored) frames; at least 1 (the top) when enumeration failed. */
+function nonErrorFrameCount(frames: chrome.webNavigation.GetAllFrameResultDetails[]): number {
+  return frames.length === 0 ? 1 : frames.filter(f => !f.errorOccurred).length
 }
 
 function originOf(url: string | undefined): string | null {
@@ -314,6 +353,40 @@ function aggregate(
     .sort((a, b) => (a.inViewport === b.inViewport ? 0 : a.inViewport ? -1 : 1))
     .slice(0, Math.max(1, limit))
   return { ...base, tabId, loading, elements }
+}
+
+/**
+ * Merge each frame's forms/orphans. Indices are already frame-encoded so they stay globally
+ * unique; we just concatenate, take the top frame's url/title, and apply the total field cap
+ * (each frame already ranked + limited internally). `skippedFrames` flags unread cross-origin
+ * frames so the agent knows the list may be incomplete.
+ */
+function aggregateForms(
+  partials: FormsState[],
+  tabId: number,
+  loading: boolean,
+  limit: number,
+  skippedFrames: number,
+): FormsState {
+  const base = partials.find(p => p.url) ?? partials[0]
+  let budget = Math.max(1, limit)
+  const forms: FormsState['forms'] = []
+  for (const g of partials.flatMap(p => p.forms)) {
+    if (budget <= 0) break
+    const fields = g.fields.slice(0, budget)
+    budget -= fields.length
+    forms.push({ ...g, fields })
+  }
+  const orphans = partials.flatMap(p => p.orphans).slice(0, Math.max(0, budget))
+  return {
+    tabId,
+    url: base?.url ?? '',
+    title: base?.title ?? '',
+    forms,
+    orphans,
+    loading,
+    skippedFrames: skippedFrames > 0 ? skippedFrames : undefined,
+  }
 }
 
 /** Send to a specific frame's content script; inject and retry once if no receiver is present. */

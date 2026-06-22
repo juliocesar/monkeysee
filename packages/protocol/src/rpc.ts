@@ -10,6 +10,7 @@ export type RpcMethod =
   | 'go_forward'
   | 'wait_for_load'
   | 'get_state'
+  | 'get_forms'
   | 'extract_text'
   | 'screenshot'
   | 'click'

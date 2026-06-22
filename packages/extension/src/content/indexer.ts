@@ -54,7 +54,7 @@ interface Candidate {
   distance: number
 }
 
-function isVisible(el: Element, rect: DOMRect): boolean {
+export function isVisible(el: Element, rect: DOMRect): boolean {
   if (rect.width <= 0 || rect.height <= 0) return false
   const style = getComputedStyle(el)
   if (style.display === 'none' || style.visibility === 'hidden') return false
@@ -70,18 +70,26 @@ function isVisible(el: Element, rect: DOMRect): boolean {
   return true
 }
 
-function intersectsViewport(rect: DOMRect): boolean {
+export function intersectsViewport(rect: DOMRect): boolean {
   const vw = window.innerWidth
   const vh = window.innerHeight
   return rect.bottom > 0 && rect.right > 0 && rect.top < vh && rect.left < vw
 }
 
-function viewportDistance(rect: DOMRect): number {
+export function viewportDistance(rect: DOMRect): number {
   const vh = window.innerHeight
   if (rect.top >= 0 && rect.bottom <= vh) return 0
   if (rect.bottom < 0) return -rect.bottom
   if (rect.top > vh) return rect.top - vh
   return 0
+}
+
+/**
+ * A box in top-viewport CSS px from a frame-local rect + this frame's offset. Shared by the
+ * indexer and form discovery so both report coordinates in one space (set-of-marks/click_at).
+ */
+export function visibleBox(rect: DOMRect, off: { x: number; y: number }): Box {
+  return [round(rect.left + off.x), round(rect.top + off.y), round(rect.width), round(rect.height)]
 }
 
 function inputValue(el: Element): string | undefined {
@@ -113,12 +121,7 @@ export function buildPageState(frameId: number, limit = DEFAULT_LIMIT, loading =
     if (hasIndexedInteractiveAncestor(el, nodes)) continue
 
     // Visibility/ranking stay frame-local; the reported box is in top-viewport coords.
-    const box: Box = [
-      round(rect.left + off.x),
-      round(rect.top + off.y),
-      round(rect.width),
-      round(rect.height),
-    ]
+    const box = visibleBox(rect, off)
     candidates.push({
       el,
       role: roleOf(el),

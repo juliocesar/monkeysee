@@ -3,6 +3,7 @@ import type { RpcError } from 'monkeysee-protocol'
 /** RPC methods the content script handles directly (they need DOM access). */
 export type ContentMethod =
   | 'get_state'
+  | 'get_forms'
   | 'extract_text'
   | 'click'
   | 'type'

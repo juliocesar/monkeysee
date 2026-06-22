@@ -53,8 +53,11 @@ session B ─stdio─▶ │ bridge (FOLLOWER) │  proxies its RPCs to the lead
 Once it's wired up, your agent gets a toolbox:
 
 - **Look:** `get_state` (the page as a numbered element list, optionally with a
-  set-of-marks screenshot), `extract_text`, `screenshot`
-- **Act on what it sees:** `click`, `type`, `select_option`, `hover`, `focus` (all by element index)
+  set-of-marks screenshot), `get_forms` (just the forms — every field with its type, label,
+  current value, options and flags; far cheaper than `get_state` for filling tasks),
+  `extract_text`, `screenshot`
+- **Act on what it sees:** `click`, `type`, `select_option`, `fill_fields` (fill many fields
+  in one call), `hover`, `focus` (all by element index)
 - **Act by hand:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
 - **Get around:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
 - **Juggle tabs:** `list_tabs`, `switch_tab`, `close_tab`
@@ -68,8 +71,9 @@ workflows that fall out of that:
 
 - **Fill forms with context the agent already has.** Point Claude Code or Codex at a signup,
   job application, expense report, or vendor onboarding form and let it populate the fields
-  from a file, a prior conversation, or your repo. It reads the form as an indexed element
-  list, types into each field, and tells you what it entered before submitting.
+  from a file, a prior conversation, or your repo. It reads the form with `get_forms` (one
+  compact, grouped list of fields — labels, types, current values, options), fills them in a
+  single `fill_fields` call, and tells you what it entered before submitting.
 - **Pull data out of dashboards that have no API.** Analytics, billing, internal admin
   panels you're logged into. The agent navigates, `extract_text`s, and hands back structured
   notes, no scraping credentials or headless re-login required.

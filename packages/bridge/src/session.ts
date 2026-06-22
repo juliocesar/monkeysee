@@ -20,6 +20,7 @@ const DEFAULTS_TO_CURRENT_TAB = new Set<RpcMethod>([
   'wait_for_load',
   'screenshot',
   'get_state',
+  'get_forms',
   'extract_text',
   'click',
   'type',

@@ -1,5 +1,6 @@
 import { isContentRequest, type ContentRequest, type ContentResponse } from '../shared/messages'
 import { buildPageState, extractText, frameOffset } from './indexer'
+import { buildFormsState } from './forms'
 import { resolveHandle } from './handles'
 import * as actions from './actions'
 import { ContentError } from './actions'
@@ -59,6 +60,16 @@ async function dispatch(req: ContentRequest): Promise<unknown> {
       return buildPageState(
         req.frameId,
         p.limit as number | undefined,
+        (p.loading as boolean) ?? false,
+      )
+    case 'get_forms':
+      return buildFormsState(
+        req.frameId,
+        {
+          includeHidden: p.includeHidden as boolean | undefined,
+          includeBoxes: p.includeBoxes as boolean | undefined,
+          limit: p.limit as number | undefined,
+        },
         (p.loading as boolean) ?? false,
       )
     case 'extract_text': {
