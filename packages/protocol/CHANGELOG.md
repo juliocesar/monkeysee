@@ -1,5 +1,11 @@
 # monkeysee-protocol
 
+## 0.3.0
+
+### Minor Changes
+
+- Add a progressive (cinematic) fill mode to `fill_fields`. A new `mode: 'batch' | 'progressive'` param (default `progressive`) plus `pace: 'fast' | 'normal' | 'slow'` make the fill human-watchable: smooth-scroll each field into view, typewriter text input, and open dropdowns to click the option. `mode: 'batch'` keeps the instant, no-animation fill for unattended/programmatic runs.
+
 ## 0.2.0
 
 ### Minor Changes
