@@ -1,0 +1,4 @@
+# Stand-alone workspace root: keeps `pnpm install` here from walking up into the
+# monkeysee workspace and polluting its lockfile. This fixture is intentionally NOT a
+# member of the repo's pnpm workspace — install it on its own (see README).
+packages: []

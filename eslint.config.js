@@ -28,5 +28,13 @@ export default [
     files: ['**/*.mjs', 'eslint.config.js'],
     languageOptions: { globals: { ...globals.node } },
   },
-  { ignores: ['**/dist/**', '**/*.tsbuildinfo', 'packages/extension/static/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/*.tsbuildinfo',
+      'packages/extension/static/**',
+      // Generated shadcn test fixture — follows upstream formatting, not the repo's.
+      'fixtures/**',
+    ],
+  },
 ]

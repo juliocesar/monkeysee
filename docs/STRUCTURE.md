@@ -128,6 +128,7 @@ Mutating actions run through one of two backends, selectable in the popup
 | `eslint.config.js`    | flat config (ESLint 9 + only-warn + prettier)            |
 | `.mcp.json.example`   | template Claude Code MCP entry; copy to `.mcp.json` (git-ignored, local) |
 | `.changeset/`         | pending release notes for the published packages         |
+| `fixtures/sample-form/` | shadcn/ui form for live-testing MonkeySee; stand-alone (not a workspace member), runs on `:5180` — see its `README.md` |
 
 ## Design decisions
 
