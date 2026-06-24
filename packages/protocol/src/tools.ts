@@ -34,15 +34,24 @@ export const FillFieldsParams = z.object({
         /** Text to type into a value field (input/textarea/contenteditable). */
         value: z.string().optional(),
         /**
-         * Set a checkbox/radio: the bridge clicks the field only when its current `checked`
-         * state differs from this value, so it is idempotent (re-running a fill is safe).
+         * Set a checkbox/radio: clicked only when its current `checked` state differs from
+         * this value, so it is idempotent (re-running a fill is safe).
          */
         checked: z.boolean().optional(),
-        /** Option value to choose in a <select>. */
+        /** Option value to choose in a <select> / combobox. */
         option: z.string().optional(),
       }),
     )
     .min(1),
+  /**
+   * `progressive` (default) fills the form the way a person would: smooth-scroll each field
+   * into view, typewriter text/textarea input, and open dropdowns to click the option — a
+   * human-watchable fill for demos/recordings. `batch` applies every field instantly with no
+   * scrolling or animation; use it for fast, unattended/programmatic fills.
+   */
+  mode: z.enum(['batch', 'progressive']).optional(),
+  /** Speed of the progressive animation. Default `fast`. Ignored in `batch` mode. */
+  pace: z.enum(['fast', 'normal', 'slow']).optional(),
 })
 
 export const ClickParams = z.object({ ...tabTarget, index: z.number().int() })

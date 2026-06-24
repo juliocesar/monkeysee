@@ -86,6 +86,13 @@ async function dispatch(req: ContentRequest): Promise<unknown> {
       return actions.type(p as { index: number; text: string })
     case 'select_option':
       return actions.selectOption(p as { index: number; value: string })
+    case 'fill_progressive':
+      return actions.fillProgressive(
+        p as {
+          fields: Array<{ index: number; value?: string; option?: string; checked?: boolean }>
+          pace?: 'fast' | 'normal' | 'slow'
+        },
+      )
     case 'hover':
       return actions.hover(p as { index: number })
     case 'focus':

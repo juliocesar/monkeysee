@@ -97,6 +97,7 @@ function startFakeExtension() {
     orphans: [],
     loading: false,
   }
+  ws.calls = []
   ws.on('message', raw => {
     let req
     try {
@@ -105,6 +106,7 @@ function startFakeExtension() {
       return
     }
     if (!req.id) return
+    ws.calls.push(req.method)
     let res
     switch (req.method) {
       case 'get_forms':
@@ -173,6 +175,16 @@ function startFakeExtension() {
       case 'switch_tab':
         // Echo the targeted tab so the test can assert the envelope tabId was threaded.
         res = { id: req.id, ok: true, result: { tabId: req.tabId } }
+        break
+      case 'fill_progressive':
+        // The content script runs the whole choreographed fill and returns per-field results.
+        res = {
+          id: req.id,
+          ok: true,
+          result: {
+            results: (req.params?.fields ?? []).map(f => ({ index: f.index, ok: true })),
+          },
+        }
         break
       default:
         // Echo tabId so tabId-targeting through the RPC envelope is observable.
@@ -286,8 +298,9 @@ async function main() {
     textOf(forms).includes('"index": 50000'),
   )
 
-  // 3c) fill_fields batches writes in one call and returns a per-field result array.
-  // The checkbox starts unchecked (get_forms), so checked:true must produce a click.
+  // 3c) fill_fields defaults to progressive: it forwards a single fill_progressive RPC to the
+  // content script (no per-field decomposition) and passes its per-field results straight back.
+  ext.calls.length = 0
   const filled = await client.callTool({
     name: 'fill_fields',
     arguments: {
@@ -302,6 +315,35 @@ async function main() {
   check(
     'fill_fields applied both fields ok',
     (textOf(filled).match(/"ok": true/g) ?? []).length === 2,
+  )
+  check(
+    'fill_fields defaults to a single progressive RPC (no decomposition)',
+    ext.calls.includes('fill_progressive') && !ext.calls.includes('type'),
+  )
+
+  // 3d) batch mode opts out: it decomposes into individual type/click RPCs instead.
+  // The checkbox starts unchecked (get_forms), so checked:true must produce a click.
+  ext.calls.length = 0
+  const batchFilled = await client.callTool({
+    name: 'fill_fields',
+    arguments: {
+      mode: 'batch',
+      fields: [
+        { index: 50000, value: 'a@b.com' },
+        { index: 50001, checked: true },
+      ],
+    },
+  })
+  check('fill_fields batch succeeds', !batchFilled.isError)
+  check(
+    'fill_fields batch applied both fields ok',
+    (textOf(batchFilled).match(/"ok": true/g) ?? []).length === 2,
+  )
+  check(
+    'fill_fields batch decomposes into type + click (no fill_progressive)',
+    ext.calls.includes('type') &&
+      ext.calls.includes('click') &&
+      !ext.calls.includes('fill_progressive'),
   )
 
   // 4) stale_handle maps to an actionable error

@@ -99,6 +99,21 @@ function currentCheckedByIndex(forms: FormsState): Map<number, boolean> {
   return map
 }
 
+/**
+ * Generous upper bound for how long a progressive fill can take in the content script, so the
+ * RPC call doesn't time out mid-animation. Scales with typed characters and field count per
+ * pace, with headroom on top of the bridge's normal 30s default.
+ */
+function progressiveTimeoutMs(
+  fields: Array<{ value?: string }>,
+  pace: 'fast' | 'normal' | 'slow',
+): number {
+  const perChar = pace === 'slow' ? 60 : pace === 'normal' ? 32 : 16
+  const perField = pace === 'slow' ? 1_500 : pace === 'normal' ? 1_000 : 700
+  const chars = fields.reduce((n, f) => n + (typeof f.value === 'string' ? f.value.length : 0), 0)
+  return Math.max(30_000, 15_000 + chars * perChar + fields.length * perField)
+}
+
 const OBSERVE = 'Observation'
 const SEMANTIC = 'Semantic action (operates on an index from get_state)'
 const SPATIAL = 'Spatial/raw action (CSS px, viewport-relative)'
@@ -197,7 +212,8 @@ export function registerTools(server: McpServer, session: Session): void {
   server.registerTool(
     'fill_fields',
     {
-      description: `${SEMANTIC}: fill multiple form fields in one call (the batch counterpart to get_forms). Pass an array of { index, value? | option? | checked? } using indices from get_forms: \`value\` types into a text/contenteditable field, \`option\` selects a <select> value, \`checked\` sets a checkbox/radio (idempotent — clicked only if its current state differs). Fields are applied in order; the result is a per-field { index, ok, error? } array, so one failed field does not abort the rest.`,
+      description: `${SEMANTIC}: fill multiple form fields in one call (the batch counterpart to get_forms). Pass an array of { index, value? | option? | checked? } using indices from get_forms: \`value\` types into a text/contenteditable field, \`option\` chooses a <select>/dropdown value, \`checked\` sets a checkbox/radio (idempotent — applied only if its current state differs). One failed field does not abort the rest; the result is a per-field { index, ok, error? } array.
+\`mode\` defaults to **progressive**: a human-watchable fill that smooth-scrolls each field into view, typewriters text, and opens dropdowns to click the option — use it by default, and especially when the run is being watched or recorded. Pass \`mode: 'batch'\` for an instant, no-animation fill when speed matters or the run is unattended/programmatic. \`pace\` ('fast' | 'normal' | 'slow', default 'fast') tunes the progressive animation and is ignored in batch mode.`,
       inputSchema: FillFieldsParams.shape,
     },
     async args => {
@@ -208,9 +224,28 @@ export function registerTools(server: McpServer, session: Session): void {
         checked?: boolean
         option?: string
       }>
+      const mode = (params.mode as 'batch' | 'progressive' | undefined) ?? 'progressive'
+      const pace = (params.pace as 'fast' | 'normal' | 'slow' | undefined) ?? 'fast'
 
-      // For idempotent `checked`, learn current checked state once up front so we only
-      // click controls that actually need toggling (re-running a fill stays a no-op).
+      // Progressive: the content script runs the whole choreographed fill in one RPC, so it
+      // may take several seconds — extend the call timeout past the 30s default to cover the
+      // typing/scrolling/dropdown beats (slower paces and longer text take longer).
+      if (mode === 'progressive') {
+        try {
+          const result = await session.call(
+            'fill_progressive',
+            { fields, pace },
+            { tabId, timeoutMs: progressiveTimeoutMs(fields, pace) },
+          )
+          return textResult(result)
+        } catch (e) {
+          return errorResult(describeError(e))
+        }
+      }
+
+      // Batch: decompose into individual instant actions. For idempotent `checked`, learn
+      // current checked state once up front so we only click controls that need toggling
+      // (re-running a fill stays a no-op).
       let checkedNow: Map<number, boolean> | null = null
       if (fields.some(f => typeof f.checked === 'boolean')) {
         try {

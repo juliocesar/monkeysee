@@ -8,6 +8,7 @@ export type ContentMethod =
   | 'click'
   | 'type'
   | 'select_option'
+  | 'fill_progressive'
   | 'hover'
   | 'focus'
   | 'click_at'

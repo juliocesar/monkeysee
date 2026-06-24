@@ -25,6 +25,7 @@ const DEFAULTS_TO_CURRENT_TAB = new Set<RpcMethod>([
   'click',
   'type',
   'select_option',
+  'fill_progressive',
   'hover',
   'focus',
   'click_at',

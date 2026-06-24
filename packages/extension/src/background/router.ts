@@ -34,6 +34,7 @@ const CONTENT_METHODS = new Set<ContentMethod>([
   'click',
   'type',
   'select_option',
+  'fill_progressive',
   'hover',
   'focus',
   'click_at',
@@ -49,6 +50,7 @@ const GATED_METHODS = new Set<RpcMethod>([
   'click',
   'type',
   'select_option',
+  'fill_progressive',
   'click_at',
   'drag',
   'press',
@@ -233,7 +235,12 @@ async function bringTabToFront(tabId: number): Promise<void> {
 
 /** Decode the frame a handle index belongs to (indices are `frameId * FRAME_STRIDE + n`). */
 function frameOf(params: Record<string, unknown>): number {
-  const index = params.index
+  // Single-index actions carry `index`; fill_progressive carries a `fields` array — route it
+  // to the frame of its first field (a progressive fill operates within one frame's form).
+  const index =
+    typeof params.index === 'number'
+      ? params.index
+      : (params.fields as Array<{ index?: number }> | undefined)?.[0]?.index
   return typeof index === 'number' ? Math.floor(index / FRAME_STRIDE) : 0
 }
 
