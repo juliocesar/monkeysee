@@ -12,7 +12,7 @@ your everything.
 
 ## Demo
 
-https://github.com/user-attachments/assets/58788fe4-6977-47d0-a47e-14f965c47e8d
+https://github.com/user-attachments/assets/3d173342-1f1c-4c32-bb78-6f9e30aa73b2
 
 ## This is not an agent
 
