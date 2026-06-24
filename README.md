@@ -57,7 +57,8 @@ Once it's wired up, your agent gets a toolbox:
   current value, options and flags; far cheaper than `get_state` for filling tasks),
   `extract_text`, `screenshot`
 - **Act on what it sees:** `click`, `type`, `select_option`, `fill_fields` (fill many fields
-  in one call), `hover`, `focus` (all by element index)
+  in one call, either instantly or as a watchable typewriter fill), `hover`, `focus` (all by
+  element index)
 - **Act by hand:** `click_at`, `scroll`, `scroll_to`, `drag`, `press`, `type_text`
 - **Get around:** `open_tab`, `navigate`, `go_back`, `go_forward`, `wait_for_load`
 - **Juggle tabs:** `list_tabs`, `switch_tab`, `close_tab`
@@ -73,7 +74,10 @@ workflows that fall out of that:
   job application, expense report, or vendor onboarding form and let it populate the fields
   from a file, a prior conversation, or your repo. It reads the form with `get_forms` (one
   compact, grouped list of fields — labels, types, current values, options), fills them in a
-  single `fill_fields` call, and tells you what it entered before submitting.
+  single `fill_fields` call, and tells you what it entered before submitting. By default
+  `fill_fields` runs in **progressive** mode: it scrolls each field into view and types it in
+  like a person, so you can watch the form fill itself (great for demos and recordings). Pass
+  `mode: 'batch'` for an instant, unattended fill instead.
 - **Pull data out of dashboards that have no API.** Analytics, billing, internal admin
   panels you're logged into. The agent navigates, `extract_text`s, and hands back structured
   notes, no scraping credentials or headless re-login required.
