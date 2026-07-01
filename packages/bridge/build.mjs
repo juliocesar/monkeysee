@@ -4,9 +4,10 @@ import { cpSync, existsSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const watch = process.argv.includes('--watch')
-// Dev-only debug/latency logging is compiled in under `pnpm dev` (watch) or when
-// MONKEYSEE_DEBUG=1 is set at build time; released builds (`pnpm build`) omit it.
-const dev = watch || process.env.MONKEYSEE_DEBUG === '1'
+// Dev-only debug/latency logging is compiled in under `pnpm dev` (watch), with the
+// `--debug` build flag (`pnpm build:debug`), or when MONKEYSEE_DEBUG=1 is set at build
+// time; a plain released build (`pnpm build`) omits it.
+const dev = watch || process.argv.includes('--debug') || process.env.MONKEYSEE_DEBUG === '1'
 const opts = {
   entryPoints: ['src/index.ts'],
   outfile: 'dist/index.js',
@@ -27,7 +28,9 @@ const opts = {
 function bundleExtension() {
   const extDir = fileURLToPath(new URL('../extension', import.meta.url))
   if (!existsSync(extDir)) return // not in the monorepo (e.g. published consumer)
-  const r = spawnSync('node', ['build.mjs'], { cwd: extDir, stdio: 'inherit' })
+  // Forward the debug flag so the bundled extension matches the bridge's build.
+  const extArgs = dev ? ['build.mjs', '--debug'] : ['build.mjs']
+  const r = spawnSync('node', extArgs, { cwd: extDir, stdio: 'inherit' })
   if (r.status !== 0) throw new Error('extension build failed')
   const extDist = fileURLToPath(new URL('../extension/dist', import.meta.url))
   const dest = fileURLToPath(new URL('./dist/extension', import.meta.url))

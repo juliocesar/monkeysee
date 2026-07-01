@@ -5,10 +5,11 @@ const watch = process.argv.includes('--watch')
 const outdir = 'dist'
 mkdirSync(outdir, { recursive: true })
 
-// Dev-only debug/latency logging is compiled in under `pnpm dev` (watch) or when
-// MONKEYSEE_DEBUG=1 is set at build time; released builds (`pnpm build`) omit it, so the
-// bundled/published extension never emits log traffic.
-const dev = watch || process.env.MONKEYSEE_DEBUG === '1'
+// Dev-only debug/latency logging is compiled in under `pnpm dev` (watch), with the
+// `--debug` build flag (`pnpm build:debug`), or when MONKEYSEE_DEBUG=1 is set at build
+// time; a plain released build (`pnpm build`) omits it, so the bundled/published extension
+// never emits log traffic.
+const dev = watch || process.argv.includes('--debug') || process.env.MONKEYSEE_DEBUG === '1'
 const define = { __MONKEYSEE_DEV__: String(dev) }
 
 // Content script MUST be a classic script (IIFE), no ESM, single file.
