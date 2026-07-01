@@ -9,12 +9,17 @@ import { WebSocket } from 'ws'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, join } from 'node:path'
+import { readFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BRIDGE = resolve(__dirname, '../dist/index.js')
 const PORT = '8799' // dedicated test extension port
 const CONTROL_PORT = '8798' // dedicated test control port (never collide with a real bridge)
+// Dev-only debug log: force it on for this run into a private file so we can assert the
+// bridge writes both its own spans and entries the extension relays over the WS.
+const DEBUG_FILE = join(tmpdir(), `monkeysee-e2e-debug-${process.pid}.log`)
 
 // A 1x1 transparent PNG; stands in for a captured viewport in the browser-free harness.
 const TINY_PNG =
@@ -59,6 +64,13 @@ function startFakeExtension() {
   }
   ws.on('open', () => {
     ws.send(JSON.stringify({ type: 'hello', extensionVersion: '0.0.1', protocolVersion: '0.0.1' }))
+    // Stand in for a real SW/content span: prove ext -> bridge log relay reaches the file.
+    ws.send(
+      JSON.stringify({
+        type: 'log',
+        entry: { t: Date.now(), comp: 'content', ev: 'e2e-marker', id: 'r1', dur: 12.3 },
+      }),
+    )
   })
   const fakeForms = {
     tabId: 7,
@@ -203,7 +215,13 @@ async function main() {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [BRIDGE],
-    env: { ...process.env, MONKEYSEE_WS_PORT: PORT, MONKEYSEE_CONTROL_PORT: CONTROL_PORT },
+    env: {
+      ...process.env,
+      MONKEYSEE_WS_PORT: PORT,
+      MONKEYSEE_CONTROL_PORT: CONTROL_PORT,
+      MONKEYSEE_DEBUG: '1',
+      MONKEYSEE_DEBUG_FILE: DEBUG_FILE,
+    },
     stderr: 'inherit',
   })
   const client = new Client({ name: 'e2e-test', version: '0.0.0' })
@@ -403,6 +421,34 @@ async function main() {
   check('done returns the answer', doneText.includes('Found the Wales article.'))
   check('done grounds with url', doneText.includes('en.wikipedia.org/wiki/Wales'))
   check('done grounds with snippet', /Wales is a country/.test(doneText))
+
+  // 6) dev-only debug log: the bridge wrote its own span AND the entry the ext relayed.
+  let logLines = []
+  try {
+    logLines = readFileSync(DEBUG_FILE, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(l => JSON.parse(l))
+  } catch {
+    // leave empty → checks below fail loudly
+  }
+  check(
+    'debug log records a bridge rpc span',
+    logLines.some(e => e.comp === 'bridge' && e.ev === 'rpc' && typeof e.dur === 'number'),
+  )
+  check(
+    'debug log records the entry the extension relayed over the WS',
+    logLines.some(e => e.comp === 'content' && e.ev === 'e2e-marker'),
+  )
+  check(
+    'debug log lines are session-tagged',
+    logLines.every(e => typeof e.sess === 'string'),
+  )
+  try {
+    unlinkSync(DEBUG_FILE)
+  } catch {
+    // best-effort cleanup
+  }
 
   ext.close()
   await client.close()

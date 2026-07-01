@@ -1,7 +1,9 @@
+import { performance } from 'node:perf_hooks'
 import { WebSocket } from 'ws'
 import { PROTOCOL_VERSION } from 'monkeysee-protocol'
 import type { RpcEvent, RpcMethod, RpcRequest, RpcResponse } from 'monkeysee-protocol'
 import { RpcCallError } from './ws-server'
+import { debugEnabled, log as debugLog } from './debug-log'
 import type { RpcBackend } from './session'
 
 interface Pending {
@@ -96,7 +98,7 @@ export class ControlClient implements RpcBackend {
     const req: RpcRequest = { id, method, params, tabId: opts.tabId }
     const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-    return new Promise<unknown>((resolve, reject) => {
+    const p = new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(
@@ -109,6 +111,36 @@ export class ControlClient implements RpcBackend {
       this.pending.set(id, { resolve, reject, timer })
       socket.send(JSON.stringify(req))
     })
+    if (!debugEnabled()) return p
+    // Follower's extra hop: this measures follower -> leader relay -> extension -> back. The
+    // leader logs its own `rpc` span (a different `r<n>` id) for the extension leg itself.
+    const start = performance.now()
+    return p.then(
+      result => {
+        debugLog({
+          t: Date.now(),
+          comp: 'bridge',
+          ev: 'control.rpc',
+          id,
+          method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { ok: true },
+        })
+        return result
+      },
+      (err: unknown) => {
+        debugLog({
+          t: Date.now(),
+          comp: 'bridge',
+          ev: 'control.rpc',
+          id,
+          method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { ok: false, code: (err as RpcCallError)?.rpc?.code },
+        })
+        throw err
+      },
+    )
   }
 
   close(): void {

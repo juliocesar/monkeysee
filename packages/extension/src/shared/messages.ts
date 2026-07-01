@@ -32,6 +32,8 @@ export interface ContentRequest {
   method: ContentMethod | ContentControl
   params: unknown
   frameId: number
+  /** Dev-only RPC correlation id so content-script spans join the bridge/SW timeline. */
+  debugId?: string
 }
 
 export type ContentResponse = { ok: true; result: unknown } | { ok: false; error: RpcError }

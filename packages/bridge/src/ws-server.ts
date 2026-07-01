@@ -1,6 +1,8 @@
+import { performance } from 'node:perf_hooks'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { BridgeEvent, RpcMethod, RpcRequest, RpcResponse, RpcError } from 'monkeysee-protocol'
 import { PROTOCOL_VERSION, isProtocolCompatible } from 'monkeysee-protocol'
+import { debugEnabled, log as debugLog, logRemote } from './debug-log'
 
 /** Error thrown when an RPC call fails; carries the structured RpcError. */
 export class RpcCallError extends Error {
@@ -101,10 +103,17 @@ export class WsServer {
       return
     }
 
-    // Unsolicited event (e.g. hello handshake).
+    // Unsolicited event (hello handshake, keepalive ping, or a dev-only debug log entry).
     if (msg && typeof msg === 'object' && 'type' in msg) {
-      const ev = msg as { type: string; extensionVersion?: string; protocolVersion?: string }
+      const ev = msg as {
+        type: string
+        extensionVersion?: string
+        protocolVersion?: string
+        entry?: import('monkeysee-protocol').DebugEntry
+      }
       if (ev.type === 'hello') this.onHello(ws, ev.extensionVersion, ev.protocolVersion)
+      // Extension-side spans (SW + content) relayed here so all logs share one file.
+      else if (ev.type === 'log' && ev.entry) logRemote(ev.entry)
       return
     }
 
@@ -190,7 +199,7 @@ export class WsServer {
     const req: RpcRequest = { id, method, params, tabId: opts.tabId }
     const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-    return new Promise<unknown>((resolve, reject) => {
+    const p = new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(
@@ -203,6 +212,36 @@ export class WsServer {
       this.pending.set(id, { resolve, reject, timer })
       this.socket!.send(JSON.stringify(req))
     })
+    if (!debugEnabled()) return p
+    // `rpc` span = the extension round-trip (send -> matching response); its `id` is the key
+    // that the SW and content-script spans also carry, so a call joins across all processes.
+    const start = performance.now()
+    return p.then(
+      result => {
+        debugLog({
+          t: Date.now(),
+          comp: 'bridge',
+          ev: 'rpc',
+          id,
+          method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { ok: true, tabId: opts.tabId },
+        })
+        return result
+      },
+      (err: unknown) => {
+        debugLog({
+          t: Date.now(),
+          comp: 'bridge',
+          ev: 'rpc',
+          id,
+          method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { ok: false, code: (err as RpcCallError)?.rpc?.code },
+        })
+        throw err
+      },
+    )
   }
 
   close(): void {

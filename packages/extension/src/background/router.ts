@@ -9,6 +9,7 @@ import type {
 import { FRAME_STRIDE } from 'monkeysee-protocol'
 import type { ContentMethod, ContentRequest, ContentResponse } from '../shared/messages'
 import { isLoading, onceSettled } from './nav'
+import { span as debugSpan } from '../shared/debug-log'
 import * as dbg from './debugger-backend'
 import * as shot from './screenshot'
 
@@ -73,7 +74,9 @@ export function getControlledTabId(): number | null {
 
 export async function handleRequest(req: RpcRequest): Promise<RpcResponse> {
   try {
-    const result = await route(req)
+    // `route` = total SW handling for this RPC. Its sub-spans (resolveTab, allowlist,
+    // sendToContent per frame, debugger, screenshot) share `req.id` for a joined timeline.
+    const result = await debugSpan('route', { id: req.id, method: req.method }, () => route(req))
     return { id: req.id, ok: true, result }
   } catch (e) {
     const error: RpcError =
@@ -116,7 +119,9 @@ async function route(req: RpcRequest): Promise<unknown> {
       const tabId = await resolveTab(req)
       const timeoutMs = (params.timeoutMs as number | undefined) ?? 10_000
       const start = Date.now()
-      const settle = await onceSettled(tabId, timeoutMs)
+      const settle = await debugSpan('onceSettled', { id: req.id }, () =>
+        onceSettled(tabId, timeoutMs),
+      )
       if (settle === 'timeout') {
         throw new RouterError({
           code: 'timeout',
@@ -124,12 +129,16 @@ async function route(req: RpcRequest): Promise<unknown> {
         })
       }
       const remaining = Math.max(1_000, timeoutMs - (Date.now() - start))
-      await sendToContent(tabId, 'wait_quiet', { quietMs: 500, timeoutMs: remaining })
+      await debugSpan('sendToContent', { id: req.id, method: 'wait_quiet' }, () =>
+        sendToContent(tabId, 'wait_quiet', { quietMs: 500, timeoutMs: remaining }, 0, req.id),
+      )
       return { ok: true, loading: isLoading(tabId) }
     }
     case 'screenshot': {
       const tabId = await resolveTab(req)
-      return { imageBase64: await shot.capture(tabId) }
+      return {
+        imageBase64: await debugSpan('screenshot', { id: req.id }, () => shot.capture(tabId)),
+      }
     }
     case 'list_tabs': {
       const tabs = await chrome.tabs.query({})
@@ -173,13 +182,17 @@ async function route(req: RpcRequest): Promise<unknown> {
     default: {
       if (CONTENT_METHODS.has(req.method as ContentMethod)) {
         const tabId = await resolveTab(req)
-        await enforceAllowlist(tabId, req.method)
+        await debugSpan('allowlist', { id: req.id, method: req.method }, () =>
+          enforceAllowlist(tabId, req.method),
+        )
         if (DEBUGGER_METHODS.has(req.method) && (await useDebuggerBackend())) {
-          const viaDebugger = await tryDebugger(tabId, req.method, params)
+          const viaDebugger = await debugSpan('debugger', { id: req.id, method: req.method }, () =>
+            tryDebugger(tabId, req.method, params),
+          )
           if (viaDebugger) return viaDebugger.result
           // attach/CDP failure — fall through to the content-script backend
         }
-        return forwardToContent(tabId, req.method as ContentMethod, params)
+        return forwardToContent(tabId, req.method as ContentMethod, params, req.id)
       }
       throw new RouterError({ code: 'internal', message: `Unknown method ${req.method}` })
     }
@@ -195,10 +208,12 @@ function requireTabId(req: RpcRequest): number {
 }
 
 async function resolveTab(req: RpcRequest): Promise<number> {
-  const tabId = await pickTab(req)
-  // Keep the controlled tab the visible one in its window (cheap, no focus steal).
-  void chrome.tabs.update(tabId, { active: true }).catch(() => undefined)
-  return tabId
+  return debugSpan('resolveTab', { id: req.id, method: req.method }, async () => {
+    const tabId = await pickTab(req)
+    // Keep the controlled tab the visible one in its window (cheap, no focus steal).
+    void chrome.tabs.update(tabId, { active: true }).catch(() => undefined)
+    return tabId
+  })
 }
 
 async function pickTab(req: RpcRequest): Promise<number> {
@@ -249,6 +264,7 @@ async function forwardToContent(
   tabId: number,
   method: ContentMethod,
   params: Record<string, unknown>,
+  debugId?: string,
 ): Promise<unknown> {
   if (method === 'get_state') {
     const loading = isLoading(tabId)
@@ -257,12 +273,18 @@ async function forwardToContent(
     const partials = (
       await Promise.all(
         frames.map(frameId =>
-          sendToContent(tabId, 'get_state', { ...params, loading }, frameId).catch(() => null),
+          debugSpan('sendToContent', { id: debugId, method, data: { frameId } }, () =>
+            sendToContent(tabId, 'get_state', { ...params, loading }, frameId, debugId),
+          ).catch(() => null),
         ),
       )
     ).filter((p): p is PageState => p !== null)
     const state = aggregate(partials, tabId, loading, limit)
-    if (params.withScreenshot) state.screenshot = await shot.captureWithMarks(tabId, state)
+    if (params.withScreenshot) {
+      state.screenshot = await debugSpan('captureWithMarks', { id: debugId }, () =>
+        shot.captureWithMarks(tabId, state),
+      )
+    }
     return state
   }
   if (method === 'get_forms') {
@@ -273,7 +295,9 @@ async function forwardToContent(
     const partials = (
       await Promise.all(
         frameIds.map(frameId =>
-          sendToContent(tabId, 'get_forms', { ...params, loading }, frameId).catch(() => null),
+          debugSpan('sendToContent', { id: debugId, method, data: { frameId } }, () =>
+            sendToContent(tabId, 'get_forms', { ...params, loading }, frameId, debugId),
+          ).catch(() => null),
         ),
       )
     ).filter((p): p is FormsState => p !== null)
@@ -283,7 +307,10 @@ async function forwardToContent(
     return aggregateForms(partials, tabId, loading, limit, skipped)
   }
   // Index-based actions route to the element's own frame; spatial actions stay on the top.
-  return sendToContent(tabId, method, params, frameOf(params))
+  const frameId = frameOf(params)
+  return debugSpan('sendToContent', { id: debugId, method, data: { frameId } }, () =>
+    sendToContent(tabId, method, params, frameId, debugId),
+  )
 }
 
 /**
@@ -402,8 +429,9 @@ async function sendToContent(
   method: ContentMethod | 'ping' | 'wait_quiet' | 'locate',
   params: unknown,
   frameId = 0,
+  debugId?: string,
 ): Promise<unknown> {
-  const msg: ContentRequest = { channel: 'monkeysee', method, params, frameId }
+  const msg: ContentRequest = { channel: 'monkeysee', method, params, frameId, debugId }
   const opts = { frameId }
   try {
     return unwrap(await chrome.tabs.sendMessage<ContentRequest, ContentResponse>(tabId, msg, opts))

@@ -30,6 +30,7 @@ import {
   DoneParams,
 } from 'monkeysee-protocol'
 import { RpcCallError } from './ws-server'
+import { span as debugSpan } from './debug-log'
 import type { Session } from './session'
 
 function textResult(data: unknown): CallToolResult {
@@ -227,56 +228,64 @@ export function registerTools(server: McpServer, session: Session): void {
       const mode = (params.mode as 'batch' | 'progressive' | undefined) ?? 'progressive'
       const pace = (params.pace as 'fast' | 'normal' | 'slow' | undefined) ?? 'fast'
 
-      // Progressive: the content script runs the whole choreographed fill in one RPC, so it
-      // may take several seconds — extend the call timeout past the 30s default to cover the
-      // typing/scrolling/dropdown beats (slower paces and longer text take longer).
-      if (mode === 'progressive') {
-        try {
-          const result = await session.call(
-            'fill_progressive',
-            { fields, pace },
-            { tabId, timeoutMs: progressiveTimeoutMs(fields, pace) },
-          )
-          return textResult(result)
-        } catch (e) {
-          return errorResult(describeError(e))
-        }
-      }
-
-      // Batch: decompose into individual instant actions. For idempotent `checked`, learn
-      // current checked state once up front so we only click controls that need toggling
-      // (re-running a fill stays a no-op).
-      let checkedNow: Map<number, boolean> | null = null
-      if (fields.some(f => typeof f.checked === 'boolean')) {
-        try {
-          const forms = (await session.call('get_forms', {}, { tabId })) as FormsState
-          checkedNow = currentCheckedByIndex(forms)
-        } catch {
-          // best-effort: without it, a `checked` field falls back to an unconditional click
-        }
-      }
-
-      const results: Array<{ index: number; ok: boolean; error?: string }> = []
-      for (const f of fields) {
-        try {
-          if (typeof f.option === 'string') {
-            await session.call('select_option', { index: f.index, value: f.option }, { tabId })
-          } else if (typeof f.checked === 'boolean') {
-            const isOn = checkedNow?.get(f.index)
-            if (isOn === undefined || isOn !== f.checked) {
-              await session.call('click', { index: f.index }, { tabId })
+      // Time the whole batch/composite as one `tool` span so multi-RPC fills are visible as a
+      // unit alongside the per-RPC `rpc` spans they decompose into.
+      return debugSpan(
+        'tool',
+        { method: 'fill_fields', data: { mode, fields: fields.length } },
+        async () => {
+          // Progressive: the content script runs the whole choreographed fill in one RPC, so it
+          // may take several seconds — extend the call timeout past the 30s default to cover the
+          // typing/scrolling/dropdown beats (slower paces and longer text take longer).
+          if (mode === 'progressive') {
+            try {
+              const result = await session.call(
+                'fill_progressive',
+                { fields, pace },
+                { tabId, timeoutMs: progressiveTimeoutMs(fields, pace) },
+              )
+              return textResult(result)
+            } catch (e) {
+              return errorResult(describeError(e))
             }
-          } else if (typeof f.value === 'string') {
-            await session.call('type', { index: f.index, text: f.value }, { tabId })
-          } else {
-            throw new Error('field has none of value/option/checked')
           }
-          results.push({ index: f.index, ok: true })
-        } catch (e) {
-          results.push({ index: f.index, ok: false, error: describeError(e) })
-        }
-      }
-      return textResult({ results })
+
+          // Batch: decompose into individual instant actions. For idempotent `checked`, learn
+          // current checked state once up front so we only click controls that need toggling
+          // (re-running a fill stays a no-op).
+          let checkedNow: Map<number, boolean> | null = null
+          if (fields.some(f => typeof f.checked === 'boolean')) {
+            try {
+              const forms = (await session.call('get_forms', {}, { tabId })) as FormsState
+              checkedNow = currentCheckedByIndex(forms)
+            } catch {
+              // best-effort: without it, a `checked` field falls back to an unconditional click
+            }
+          }
+
+          const results: Array<{ index: number; ok: boolean; error?: string }> = []
+          for (const f of fields) {
+            try {
+              if (typeof f.option === 'string') {
+                await session.call('select_option', { index: f.index, value: f.option }, { tabId })
+              } else if (typeof f.checked === 'boolean') {
+                const isOn = checkedNow?.get(f.index)
+                if (isOn === undefined || isOn !== f.checked) {
+                  await session.call('click', { index: f.index }, { tabId })
+                }
+              } else if (typeof f.value === 'string') {
+                await session.call('type', { index: f.index, text: f.value }, { tabId })
+              } else {
+                throw new Error('field has none of value/option/checked')
+              }
+              results.push({ index: f.index, ok: true })
+            } catch (e) {
+              results.push({ index: f.index, ok: false, error: describeError(e) })
+            }
+          }
+          return textResult({ results })
+        },
+      )
     },
   )
 
@@ -441,22 +450,23 @@ export function registerTools(server: McpServer, session: Session): void {
         'Control: declare the task complete with your `answer`. The bridge grounds it by attaching the current tab URL and a short page snippet.',
       inputSchema: DoneParams.shape,
     },
-    async args => {
-      let url = ''
-      let snippet = ''
-      try {
-        const state = (await session.call('get_state', { limit: 1 })) as PageState
-        url = state.url
-      } catch {
-        // best-effort grounding
-      }
-      try {
-        const text = (await session.call('extract_text', {})) as { text?: string }
-        snippet = (text.text ?? '').trim().slice(0, 500)
-      } catch {
-        // best-effort grounding
-      }
-      return textResult({ answer: args.answer, url, snippet })
-    },
+    async args =>
+      debugSpan('tool', { method: 'done' }, async () => {
+        let url = ''
+        let snippet = ''
+        try {
+          const state = (await session.call('get_state', { limit: 1 })) as PageState
+          url = state.url
+        } catch {
+          // best-effort grounding
+        }
+        try {
+          const text = (await session.call('extract_text', {})) as { text?: string }
+          snippet = (text.text ?? '').trim().slice(0, 500)
+        } catch {
+          // best-effort grounding
+        }
+        return textResult({ answer: args.answer, url, snippet })
+      }),
   )
 }

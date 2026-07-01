@@ -4,6 +4,9 @@ import { cpSync, existsSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const watch = process.argv.includes('--watch')
+// Dev-only debug/latency logging is compiled in under `pnpm dev` (watch) or when
+// MONKEYSEE_DEBUG=1 is set at build time; released builds (`pnpm build`) omit it.
+const dev = watch || process.env.MONKEYSEE_DEBUG === '1'
 const opts = {
   entryPoints: ['src/index.ts'],
   outfile: 'dist/index.js',
@@ -15,6 +18,7 @@ const opts = {
   // Keep deps external; they are installed from the published package.
   packages: 'external',
   sourcemap: true,
+  define: { __MONKEYSEE_DEV__: String(dev) },
 }
 // Bundle the built extension into the bridge so a single `monkeysee-bridge`
 // install ships both the MCP server and the unpacked extension (no Chrome Web

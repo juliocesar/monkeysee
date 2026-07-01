@@ -4,6 +4,19 @@ import { buildFormsState } from './forms'
 import { resolveHandle } from './handles'
 import * as actions from './actions'
 import { ContentError } from './actions'
+import { DEBUG, point } from '../shared/debug-log'
+
+/** Pull a few cheap, analysis-worthy counts out of a dispatch result (dev logging only). */
+function contentMeta(method: ContentRequest['method'], result: unknown): Record<string, unknown> {
+  if (method === 'get_state') {
+    return { elements: (result as { elements?: unknown[] })?.elements?.length ?? 0 }
+  }
+  if (method === 'get_forms') {
+    const r = result as { forms?: unknown[]; orphans?: unknown[] }
+    return { forms: r?.forms?.length ?? 0, orphans: r?.orphans?.length ?? 0 }
+  }
+  return {}
+}
 
 function waitQuiet(quietMs: number, timeoutMs: number): Promise<{ ok: true }> {
   return new Promise(resolve => {
@@ -118,13 +131,34 @@ async function dispatch(req: ContentRequest): Promise<unknown> {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!isContentRequest(msg)) return false
+  // `content` span = the actual DOM work for this method (indexing, form walk, action,
+  // wait_quiet). Keyed by the RPC id so it joins the SW `sendToContent` and bridge `rpc` spans.
+  const start = DEBUG ? performance.now() : 0
   dispatch(msg)
-    .then(result => sendResponse({ ok: true, result } satisfies ContentResponse))
+    .then(result => {
+      if (DEBUG) {
+        point('content', {
+          id: msg.debugId,
+          method: msg.method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { frameId: msg.frameId, ...contentMeta(msg.method, result) },
+        })
+      }
+      sendResponse({ ok: true, result } satisfies ContentResponse)
+    })
     .catch((e: unknown) => {
       const error =
         e instanceof ContentError
           ? e.rpc
           : { code: 'internal' as const, message: e instanceof Error ? e.message : String(e) }
+      if (DEBUG) {
+        point('content', {
+          id: msg.debugId,
+          method: msg.method,
+          dur: Math.round((performance.now() - start) * 100) / 100,
+          data: { frameId: msg.frameId, ok: false, code: error.code },
+        })
+      }
       sendResponse({ ok: false, error } satisfies ContentResponse)
     })
   return true // keep the channel open for the async response

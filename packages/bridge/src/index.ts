@@ -9,11 +9,13 @@ import { startControlServer } from './control-server'
 import { createMcpServer } from './mcp-server'
 import { runInit } from './init'
 import { runDoctor } from './doctor'
+import { debugEnabled, debugFilePath, setDebugContext } from './debug-log'
 
 // stdout is the MCP JSON-RPC channel. ALL human-facing logging goes to stderr.
 const EXT_PORT = Number(process.env.MONKEYSEE_WS_PORT ?? '8787')
 const CTRL_PORT = Number(process.env.MONKEYSEE_CONTROL_PORT ?? '8788')
 const SESSION_ID = randomUUID().slice(0, 8)
+setDebugContext({ sess: SESSION_ID })
 
 /** Backend used before election settles — calls fail fast with a clear, retryable error. */
 const electingBackend: RpcBackend = {
@@ -52,6 +54,7 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport()
   await server.connect(transport)
   console.error(`[monkeysee] MCP server connected over stdio (session ${SESSION_ID})`)
+  if (debugEnabled()) console.error(`[monkeysee] debug log: ${debugFilePath()}`)
 
   // The unpacked extension is bundled next to this bin (dist/extension). Point the
   // user at it so they can chrome://extensions -> Load unpacked. stderr only.
@@ -109,6 +112,7 @@ async function electAndServe(session: Session): Promise<void> {
   leaderWs = ws
   leaderControl = control
   session.setBackend(ws)
+  setDebugContext({ role: 'leader' })
   console.error(`[monkeysee] role=leader (session ${SESSION_ID})`)
 }
 
@@ -129,6 +133,7 @@ async function becomeFollower(session: Session): Promise<void> {
   }
   follower = client
   session.setBackend(client)
+  setDebugContext({ role: 'follower' })
   console.error(`[monkeysee] role=follower (session ${SESSION_ID})`)
 }
 
